@@ -3,11 +3,11 @@
   "private": true,
   "version": "1.0.0",
   "main": "index.js",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "auth:setup": "PWDEBUG=1 playwright test tests/auth.setup.spec.ts --project=chromium --headed",
     "scrape": "playwright test tests/scrape.spec.ts --reporter=line",
-    "build-data": "ts-node scripts/buildRoomsJson.ts 2261",
+    "build-data": "node --loader ts-node/esm scripts/buildRoomsJson.ts 2261",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
