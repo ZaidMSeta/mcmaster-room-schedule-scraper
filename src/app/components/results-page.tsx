@@ -338,6 +338,8 @@ export function ResultsPage() {
               <RoomCard
                 key={room.id}
                 room={room}
+                currentHour={currentHour}
+                currentMin={currentMin}
                 onClick={() => setSelectedRoom(room)}
               />
             ))}

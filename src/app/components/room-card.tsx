@@ -4,6 +4,8 @@ import { Clock, CircleCheck, CircleAlert, Timer } from "lucide-react";
 
 interface RoomCardProps {
   room: Room;
+  currentHour: number;
+  currentMin: number;
   onClick?: () => void;
 }
 
@@ -41,8 +43,13 @@ const statusConfig: Record<
   },
 };
 
-export function RoomCard({ room, onClick }: RoomCardProps) {
-  const { status, label } = getRoomStatus(room);
+export function RoomCard({
+  room,
+  currentHour,
+  currentMin,
+  onClick,
+}: RoomCardProps) {
+  const { status, label } = getRoomStatus(room, currentHour, currentMin);
   const config = statusConfig[status];
   const Icon = config.icon;
 
@@ -69,7 +76,6 @@ export function RoomCard({ room, onClick }: RoomCardProps) {
       }}
     >
       <div className="p-4">
-        {/* Header row */}
         <div className="flex items-start justify-between mb-3">
           <div>
             <div className="flex items-baseline gap-2">
@@ -77,10 +83,11 @@ export function RoomCard({ room, onClick }: RoomCardProps) {
                 {room.buildingCode} {room.roomNumber}
               </span>
             </div>
-            <p className="text-[13px] text-muted-foreground mt-0.5">{room.building}</p>
+            <p className="text-[13px] text-muted-foreground mt-0.5">
+              {room.building}
+            </p>
           </div>
 
-          {/* Status badge */}
           <div
             className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${config.bg} ${config.text} border ${config.border}`}
           >
@@ -89,13 +96,11 @@ export function RoomCard({ room, onClick }: RoomCardProps) {
           </div>
         </div>
 
-        {/* Status detail */}
         <div className="flex items-center gap-2 mb-3">
           <div className={`w-2 h-2 rounded-full ${config.dot}`} />
           <span className="text-[13px] text-foreground">{label}</span>
         </div>
 
-        {/* Timeline */}
         <div>
           <p className="text-[11px] text-muted-foreground mb-1.5 uppercase tracking-wide">
             Today's schedule
