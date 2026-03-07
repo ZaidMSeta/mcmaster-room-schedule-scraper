@@ -8,7 +8,7 @@
 
 
 import { test } from '@playwright/test';
-import { runScrape } from '../src/scrape/run';
+import { runScrape } from '../scraper/run';
 
 test.use({ storageState: 'auth.storage.json' });
 
