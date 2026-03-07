@@ -52,7 +52,7 @@ type RoomOutput = {
 
 const XML_ROOT = path.resolve(process.cwd(), "out", "xml");
 const termArg = process.argv[2];
-const OUTPUT_FILE = path.resolve(process.cwd(), "web", "public", "rooms.json");
+const OUTPUT_FILE = path.resolve(process.cwd(), "public", "rooms.json");
 
 const parser = new XMLParser({
   ignoreAttributes: false,
