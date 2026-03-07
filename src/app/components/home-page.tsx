@@ -1,22 +1,30 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Clock, DoorOpen } from "lucide-react";
-import {
-  CURRENT_HOUR,
-  CURRENT_MIN,
-  formatTime,
-} from "../data/rooms";
+import { getBuildingOptions, loadRoomsFile } from "../data/room-data";
 import { AppFooter } from "./app-footer";
 import { QueryBuilder, QueryState } from "./query-builder";
-
+import { formatTime } from "../data/rooms";
 export function HomePage() {
   const navigate = useNavigate();
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentMin = now.getMinutes();
+  const [buildings, setBuildings] = useState<string[]>(["All Buildings"]);
 
   const [query, setQuery] = useState<QueryState>({
     building: "All Buildings",
     day: "today",
     availability: { type: "right-now" },
   });
+
+  useEffect(() => {
+    loadRoomsFile()
+      .then((data) => setBuildings(getBuildingOptions(data)))
+      .catch((error) => {
+        console.error("Failed to load buildings:", error);
+      });
+  }, []);
 
   const handleSearch = () => {
     const params = new URLSearchParams();
@@ -82,6 +90,7 @@ export function HomePage() {
             onChange={setQuery}
             onSubmit={handleSearch}
             variant="full"
+            buildings={buildings}
           />
         </div>
 
@@ -92,8 +101,7 @@ export function HomePage() {
           </p>
           <p className="text-[13px] text-muted-foreground/70 mt-2">
             <Clock className="w-3.5 h-3.5 inline-block mr-1 -mt-0.5" />
-            Showing data as of {formatTime(CURRENT_HOUR, CURRENT_MIN)} today
-          </p>
+            Showing data as of {formatTime(currentHour, currentMin)} today          </p>
         </div>
       </main>
 

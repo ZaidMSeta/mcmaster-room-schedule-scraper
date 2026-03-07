@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { BUILDINGS, formatTime } from "../data/rooms";
+import { formatTime } from "../data/rooms";
 
 export type Day =
   | "today"
@@ -39,6 +39,7 @@ interface QueryBuilderProps {
   onChange: (value: QueryState) => void;
   onSubmit: () => void;
   variant?: "full" | "compact";
+  buildings: string[];
 }
 
 type OpenMenu =
@@ -64,6 +65,7 @@ export function QueryBuilder({
   onChange,
   onSubmit,
   variant = "full",
+  buildings,
 }: QueryBuilderProps) {
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const isCompact = variant === "compact";
@@ -124,8 +126,7 @@ export function QueryBuilder({
                   Any building
                 </button>
 
-                {BUILDINGS.filter((b) => b !== "All Buildings").map((building) => (
-                  <button
+                {buildings.filter((b) => b !== "All Buildings").map((building) => (                  <button
                     key={building}
                     type="button"
                     onClick={() => {
