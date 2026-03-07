@@ -38,8 +38,7 @@ type RoomRecord = {
 
 const XML_ROOT = path.resolve(process.cwd(), "out", "xml");
 const termArg = process.argv[2];
-const OUTPUT_FILE = path.resolve(process.cwd(), "out", "rooms.json");
-
+const OUTPUT_FILE = path.resolve(process.cwd(), "web", "public", "rooms.json");
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "",
@@ -181,6 +180,156 @@ function parseLoosMap(value: unknown): Record<string, string> {
   } catch {
     return {};
   }
+}
+
+function printBuildSummary(
+  roomsArray: RoomRecord[],
+  buildings: Array<{ code: string; name: string }>
+): void {
+  let totalMeetings = 0;
+  let multiTeacherMeetings = 0;
+  let roomsWithNoMeetings = 0;
+  let suspiciousRooms = 0;
+  let maxMeetingsRoom: { roomId: string; count: number } | null = null;
+
+  const weirdRoomIds: string[] = [];
+  const roomsWithMostMeetings: Array<{ roomId: string; count: number }> = [];
+
+  for (const room of roomsArray) {
+    const count = room.meetings.length;
+    totalMeetings += count;
+
+    if (count === 0) {
+      roomsWithNoMeetings++;
+    }
+
+    if (
+      room.roomId.includes(";") ||
+      room.roomNumber.includes(";") ||
+      room.roomId.length > 40 ||
+      room.roomNumber.length > 20
+    ) {
+      suspiciousRooms++;
+      weirdRoomIds.push(room.roomId);
+    }
+
+    if (!maxMeetingsRoom || count > maxMeetingsRoom.count) {
+      maxMeetingsRoom = { roomId: room.roomId, count };
+    }
+
+    roomsWithMostMeetings.push({ roomId: room.roomId, count });
+
+    for (const meeting of room.meetings) {
+      if (meeting.teachers.length > 1) {
+        multiTeacherMeetings++;
+      }
+    }
+  }
+
+  roomsWithMostMeetings.sort((a, b) => b.count - a.count);
+
+  console.log("");
+  console.log("=== Build Summary ===");
+  console.log(`Buildings: ${buildings.length}`);
+  console.log(`Rooms: ${roomsArray.length}`);
+  console.log(`Meetings: ${totalMeetings}`);
+  console.log(`Rooms with no meetings: ${roomsWithNoMeetings}`);
+  console.log(`Meetings with multiple teachers: ${multiTeacherMeetings}`);
+  console.log(`Suspicious room records: ${suspiciousRooms}`);
+
+  if (maxMeetingsRoom) {
+    console.log(
+      `Most-booked room: ${maxMeetingsRoom.roomId} (${maxMeetingsRoom.count} meetings)`
+    );
+  }
+
+  console.log("");
+  console.log("Top 10 busiest rooms:");
+  for (const room of roomsWithMostMeetings.slice(0, 10)) {
+    console.log(`- ${room.roomId}: ${room.count} meetings`);
+  }
+
+  if (weirdRoomIds.length > 0) {
+    console.log("");
+    console.log("Suspicious room IDs to inspect:");
+    for (const roomId of weirdRoomIds.slice(0, 20)) {
+      console.log(`- ${roomId}`);
+    }
+  }
+
+  console.log("=====================");
+  console.log("");
+}
+
+function printQaSamples(roomsArray: RoomRecord[]): void {
+  console.log("=== QA Samples ===");
+
+  const sampleGroups: Array<{
+    label: string;
+    predicate: (meeting: Meeting) => boolean;
+  }> = [
+    {
+      label: "Single-meeting rooms",
+      predicate: () => true,
+    },
+    {
+      label: "Rooms with multi-teacher meetings",
+      predicate: (m) => m.teachers.length > 1,
+    },
+    {
+      label: "Rooms with labs",
+      predicate: (m) => m.component === "LAB",
+    },
+    {
+      label: "Rooms with tutorials",
+      predicate: (m) => m.component === "TUT",
+    },
+    {
+      label: "Rooms with weekend meetings",
+      predicate: (m) => m.day === 1 || m.day === 7,
+    },
+    {
+      label: "Rooms with very early meetings",
+      predicate: (m) => m.startMin <= 540,
+    },
+    {
+      label: "Rooms with late meetings",
+      predicate: (m) => m.endMin >= 1260,
+    },
+  ];
+
+  for (const group of sampleGroups) {
+    console.log("");
+    console.log(group.label + ":");
+
+    let matches: Array<{ room: RoomRecord; meeting: Meeting }> = [];
+
+    if (group.label === "Single-meeting rooms") {
+      matches = roomsArray
+        .filter((r) => r.meetings.length === 1)
+        .map((r) => ({ room: r, meeting: r.meetings[0] }));
+    } else {
+      for (const room of roomsArray) {
+        const matchingMeeting = room.meetings.find(group.predicate);
+        if (matchingMeeting) {
+          matches.push({ room, meeting: matchingMeeting });
+        }
+      }
+    }
+
+    for (const { room, meeting } of matches.slice(0, 5)) {
+      console.log(
+        `- ${room.roomId} | ${meeting.course} ${meeting.component} ${meeting.section} | day ${meeting.day} | ${meeting.startMin}-${meeting.endMin}`
+      );
+    }
+
+    if (matches.length === 0) {
+      console.log("- none");
+    }
+  }
+
+  console.log("==================");
+  console.log("");
 }
 
 function main() {
@@ -341,6 +490,8 @@ function main() {
 
   const output = {
     term: roomsArray[0]?.meetings[0]?.term ?? path.basename(inputDir),
+    sourceFolder: path.basename(inputDir),
+    generatedAt: new Date().toISOString(),
     buildings,
     rooms: roomsArray,
   };
@@ -352,6 +503,9 @@ function main() {
   console.log(`Built ${roomsArray.length} rooms`);
   console.log(`Built ${buildings.length} buildings`);
   console.log(`Wrote ${OUTPUT_FILE}`);
+
+  printBuildSummary(roomsArray, buildings);
+  printQaSamples(roomsArray);
 }
 
 main();
