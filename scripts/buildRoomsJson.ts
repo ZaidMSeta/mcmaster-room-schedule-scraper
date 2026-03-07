@@ -23,8 +23,13 @@ type Meeting = {
   component: string;
   section: string;
   day: number;
-  startMin: number;
-  endMin: number;
+  startMin: number; // minutes since midnight
+  endMin: number;   // minutes since midnight
+  startHour: number;
+  startMinute: number;
+  endHour: number;
+  endMinute: number;
+  label: string;
   teachers: string[];
 };
 
@@ -36,9 +41,19 @@ type RoomRecord = {
   meetings: Meeting[];
 };
 
+type RoomOutput = {
+  roomId: string;
+  buildingCode: string;
+  buildingName: string;
+  roomNumber: string;
+  meetings: Meeting[];
+  schedule: Record<string, Meeting[]>;
+};
+
 const XML_ROOT = path.resolve(process.cwd(), "out", "xml");
 const termArg = process.argv[2];
 const OUTPUT_FILE = path.resolve(process.cwd(), "web", "public", "rooms.json");
+
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "",
@@ -159,7 +174,7 @@ function parseMultipleLocations(location: string): ParsedLocation[] {
 }
 
 function parseLoosMap(value: unknown): Record<string, string> {
-  if (!value || typeof value !== "string") return {};
+  if (!value || typeof value !== 'string') return {};
 
   try {
     const parsed = JSON.parse(value);
@@ -180,6 +195,43 @@ function parseLoosMap(value: unknown): Record<string, string> {
   } catch {
     return {};
   }
+}
+
+function toHourMinute(totalMinutes: number): { hour: number; minute: number } {
+  return {
+    hour: Math.floor(totalMinutes / 60),
+    minute: totalMinutes % 60,
+  };
+}
+
+function buildMeetingLabel(course: string, component: string, section: string): string {
+  return `${course} ${component} ${section}`.trim();
+}
+
+function groupMeetingsByDay(meetings: Meeting[]): Record<string, Meeting[]> {
+  const schedule: Record<string, Meeting[]> = {};
+
+  for (const meeting of meetings) {
+    const key = String(meeting.day);
+
+    if (!schedule[key]) {
+      schedule[key] = [];
+    }
+
+    schedule[key].push(meeting);
+  }
+
+  for (const day in schedule) {
+    schedule[day].sort((a, b) => {
+      if (a.startMin !== b.startMin) return a.startMin - b.startMin;
+      if (a.endMin !== b.endMin) return a.endMin - b.endMin;
+      if (a.course !== b.course) return a.course.localeCompare(b.course);
+      if (a.component !== b.component) return a.component.localeCompare(b.component);
+      return a.section.localeCompare(b.section);
+    });
+  }
+
+  return schedule;
 }
 
 function printBuildSummary(
@@ -405,13 +457,15 @@ function main() {
             let parsedLocations: ParsedLocation[] = [];
 
             if (loosMap[timeblockId]) {
-              // A loos entry can itself contain multiple semicolon-separated rooms
               parsedLocations = parseMultipleLocations(loosMap[timeblockId]);
             } else {
               parsedLocations = fallbackLocations;
             }
 
             if (parsedLocations.length === 0) continue;
+
+            const { hour: startHour, minute: startMinute } = toHourMinute(tb.t1);
+            const { hour: endHour, minute: endMinute } = toHourMinute(tb.t2);
 
             for (const parsedLocation of parsedLocations) {
               const dedupeKey = [
@@ -450,6 +504,11 @@ function main() {
                 day: tb.day,
                 startMin: tb.t1,
                 endMin: tb.t2,
+                startHour,
+                startMinute,
+                endHour,
+                endMinute,
+                label: buildMeetingLabel(courseLabel, component, section),
                 teachers,
               });
             }
@@ -459,18 +518,26 @@ function main() {
     }
   }
 
-  const roomsArray = Array.from(roomMap.values())
-    .map((room) => ({
-      ...room,
-      meetings: room.meetings.sort((a, b) => {
+  const roomsArray: RoomOutput[] = Array.from(roomMap.values())
+    .map((room) => {
+      const sortedMeetings = room.meetings.sort((a, b) => {
         if (a.day !== b.day) return a.day - b.day;
         if (a.startMin !== b.startMin) return a.startMin - b.startMin;
         if (a.endMin !== b.endMin) return a.endMin - b.endMin;
         if (a.course !== b.course) return a.course.localeCompare(b.course);
         if (a.component !== b.component) return a.component.localeCompare(b.component);
         return a.section.localeCompare(b.section);
-      }),
-    }))
+      });
+
+      return {
+        roomId: room.roomId,
+        buildingCode: room.buildingCode,
+        buildingName: room.buildingName,
+        roomNumber: room.roomNumber,
+        meetings: sortedMeetings,
+        schedule: groupMeetingsByDay(sortedMeetings),
+      };
+    })
     .sort((a, b) => a.roomId.localeCompare(b.roomId));
 
   const buildingMap = new Map<string, { code: string; name: string }>();
@@ -504,8 +571,26 @@ function main() {
   console.log(`Built ${buildings.length} buildings`);
   console.log(`Wrote ${OUTPUT_FILE}`);
 
-  printBuildSummary(roomsArray, buildings);
-  printQaSamples(roomsArray);
+  printBuildSummary(
+    roomsArray.map((room) => ({
+      roomId: room.roomId,
+      buildingCode: room.buildingCode,
+      buildingName: room.buildingName,
+      roomNumber: room.roomNumber,
+      meetings: room.meetings,
+    })),
+    buildings
+  );
+
+  printQaSamples(
+    roomsArray.map((room) => ({
+      roomId: room.roomId,
+      buildingCode: room.buildingCode,
+      buildingName: room.buildingName,
+      roomNumber: room.roomNumber,
+      meetings: room.meetings,
+    }))
+  );
 }
 
 main();
