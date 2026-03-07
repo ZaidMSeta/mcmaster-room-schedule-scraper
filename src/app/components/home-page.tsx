@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Clock, DoorOpen } from "lucide-react";
+import { formatTime } from "../data/rooms";
 import { getBuildingOptions, loadRoomsFile } from "../data/room-data";
 import { AppFooter } from "./app-footer";
 import { QueryBuilder, QueryState } from "./query-builder";
-import { formatTime } from "../data/rooms";
+
 export function HomePage() {
   const navigate = useNavigate();
   const now = new Date();
