@@ -248,7 +248,7 @@ function main() {
     }
   }
 
-  const rooms = Array.from(roomMap.values())
+  const roomsArray = Array.from(roomMap.values())
     .map((room) => ({
       ...room,
       meetings: room.meetings.sort((a, b) => {
@@ -260,10 +260,33 @@ function main() {
     }))
     .sort((a, b) => a.roomId.localeCompare(b.roomId));
 
-  fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
-  fs.writeFileSync(OUTPUT_FILE, JSON.stringify(rooms, null, 2), "utf8");
+  const buildingMap = new Map<string, { code: string; name: string }>();
 
-  console.log(`Built ${rooms.length} rooms from ${xmlFiles.length} XML files.`);
+  for (const room of roomsArray) {
+    if (!buildingMap.has(room.buildingCode)) {
+      buildingMap.set(room.buildingCode, {
+        code: room.buildingCode,
+        name: room.buildingName,
+      });
+    }
+  }
+
+  const buildings = Array.from(buildingMap.values()).sort((a, b) =>
+    a.code.localeCompare(b.code)
+  );
+
+  const output = {
+    term: roomsArray[0]?.meetings[0]?.term ?? path.basename(INPUT_DIR),
+    buildings,
+    rooms: roomsArray,
+  };
+
+  fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
+  fs.writeFileSync(OUTPUT_FILE, JSON.stringify(output, null, 2), "utf8");
+
+  console.log(`Parsed ${xmlFiles.length} XML files`);
+  console.log(`Built ${roomsArray.length} rooms`);
+  console.log(`Built ${buildings.length} buildings`);
   console.log(`Wrote ${OUTPUT_FILE}`);
 }
 
