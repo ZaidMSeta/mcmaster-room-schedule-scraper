@@ -31,8 +31,28 @@ type RoomRecord = {
 
 type AttrNode = Record<string, any>;
 
-const TERM_ID = process.argv[2] ?? "2261";
-const INPUT_DIR = path.resolve(process.cwd(), "out", "xml", TERM_ID);
+const XML_ROOT = path.resolve(process.cwd(), "out", "xml");
+const termArg = process.argv[2];
+
+function resolveInputDir(): string {
+  if (termArg) {
+    return path.resolve(XML_ROOT, termArg);
+  }
+
+  const entries = fs
+    .readdirSync(XML_ROOT, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory());
+
+  if (entries.length === 1) {
+    return path.resolve(XML_ROOT, entries[0].name);
+  }
+
+  throw new Error(
+    `No term folder argument provided, and could not uniquely determine one from ${XML_ROOT}`
+  );
+}
+
+const INPUT_DIR = resolveInputDir();
 const OUTPUT_FILE = path.resolve(process.cwd(), "web", "public", "rooms.json");
 
 const parser = new XMLParser({
