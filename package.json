@@ -7,7 +7,7 @@
   "scripts": {
     "auth:setup": "PWDEBUG=1 playwright test tests/auth.setup.spec.ts --project=chromium --headed",
     "scrape": "playwright test tests/scrape.spec.ts --reporter=line",
-    "build-data": "node --loader ts-node/esm scripts/buildRoomsJson.ts 2261",
+    "build-rooms": "node --loader ts-node/esm scripts/buildRoomsJson.ts",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"

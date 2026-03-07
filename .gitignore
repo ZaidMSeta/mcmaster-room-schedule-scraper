@@ -10,4 +10,4 @@ test-results/
 .env
 out/
 auth.storage.json
-web/public/rooms.json
+public/rooms.json
