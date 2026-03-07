@@ -152,7 +152,7 @@ function main() {
     const classdata = parsed?.addcourse?.classdata;
     if (!classdata) continue;
 
-    const term = safeString(classdata.term?.n ?? classdata.term?.strm ?? TERM_ID);
+    const term = safeString(classdata.term?.n ?? classdata.term?.strm ?? path.basename(INPUT_DIR));
     const courses = asArray<AttrNode>(classdata.course);
 
     for (const courseNode of courses) {
