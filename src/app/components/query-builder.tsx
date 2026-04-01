@@ -12,6 +12,7 @@ export type Day =
 
 export type AvailabilityMode =
   | { type: "right-now" }
+  | { type: "at-time"; hour: number; min: number }
   | {
       type: "time-range";
       startHour: number;
@@ -168,7 +169,21 @@ export function QueryBuilder({
                     key={day.value}
                     type="button"
                     onClick={() => {
-                      onChange({ ...value, day: day.value });
+                      const newDay = day.value;
+                      let newAvailability = value.availability;
+
+                      // switching away from today: right-now doesn't apply, default to at-time
+                      if (newDay !== "today" && value.availability.type === "right-now") {
+                        const now = new Date();
+                        newAvailability = { type: "at-time", hour: now.getHours(), min: now.getMinutes() };
+                      }
+
+                      // switching back to today: at-time becomes right-now
+                      if (newDay === "today" && value.availability.type === "at-time") {
+                        newAvailability = { type: "right-now" };
+                      }
+
+                      onChange({ ...value, day: newDay, availability: newAvailability });
                       closeMenus();
                     }}
                     className={`w-full px-3.5 py-2 text-left text-[14px] hover:bg-accent transition-colors ${
@@ -206,9 +221,61 @@ export function QueryBuilder({
                   closeMenus();
                 }}
                 onClose={closeMenus}
+                isToday={true}
               />
             )}
           </div>
+        )}
+
+        {value.availability.type === "at-time" && (
+          <>
+            <div className="relative inline-block">
+              <button
+                type="button"
+                onClick={() => openOnly("availability-mode")}
+                className={pillButtonClass}
+              >
+                at
+                <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+              </button>
+
+              {openMenu === "availability-mode" && (
+                <AvailabilityModeMenu
+                  current={value.availability}
+                  onSelect={(next) => {
+                    updateAvailability(next);
+                    closeMenus();
+                  }}
+                  onClose={closeMenus}
+                  isToday={false}
+                />
+              )}
+            </div>
+
+            <div className="relative inline-block">
+              <button
+                type="button"
+                onClick={() => openOnly("start-time")}
+                className={pillButtonClass}
+              >
+                {formatTime(value.availability.hour, value.availability.min)}
+              </button>
+
+              {openMenu === "start-time" && (
+                <TimePopover
+                  label="Time"
+                  hour={value.availability.hour}
+                  minute={value.availability.min}
+                  onApply={(hour, minute) => {
+                    updateAvailability({ ...value.availability, hour, min: minute });
+                    closeMenus();
+                  }}
+                  onClose={closeMenus}
+                  isToday={value.day === "today"}
+                />
+              )}
+            </div>
+          </>
         )}
 
         {value.availability.type === "time-range" && (
@@ -231,6 +298,7 @@ export function QueryBuilder({
                     closeMenus();
                   }}
                   onClose={closeMenus}
+                  isToday={value.day === "today"}
                 />
               )}
             </div>
@@ -261,6 +329,7 @@ export function QueryBuilder({
                     closeMenus();
                   }}
                   onClose={closeMenus}
+                  isToday={value.day === "today"}
                 />
               )}
             </div>
@@ -290,6 +359,7 @@ export function QueryBuilder({
                     closeMenus();
                   }}
                   onClose={closeMenus}
+                  isToday={value.day === "today"}
                 />
               )}
             </div>
@@ -316,6 +386,7 @@ export function QueryBuilder({
                     closeMenus();
                   }}
                   onClose={closeMenus}
+                  isToday={value.day === "today"}
                 />
               )}
             </div>
@@ -345,6 +416,7 @@ export function QueryBuilder({
                     closeMenus();
                   }}
                   onClose={closeMenus}
+                  isToday={value.day === "today"}
                 />
               )}
             </div>
@@ -371,6 +443,7 @@ export function QueryBuilder({
                     closeMenus();
                   }}
                   onClose={closeMenus}
+                  isToday={value.day === "today"}
                 />
               )}
             </div>
@@ -400,6 +473,7 @@ export function QueryBuilder({
                     closeMenus();
                   }}
                   onClose={closeMenus}
+                  isToday={value.day === "today"}
                 />
               )}
             </div>
@@ -434,6 +508,7 @@ export function QueryBuilder({
                     closeMenus();
                   }}
                   onClose={closeMenus}
+                  isToday={value.day === "today"}
                 />
               )}
             </div>
@@ -458,22 +533,34 @@ function AvailabilityModeMenu({
   current,
   onSelect,
   onClose,
+  isToday,
 }: {
   current: AvailabilityMode;
   onSelect: (next: AvailabilityMode) => void;
   onClose: () => void;
+  isToday: boolean;
 }) {
   return (
     <>
       <MenuBackdrop onClose={onClose} />
       <div className="absolute top-full left-0 mt-1.5 w-[280px] bg-card rounded-lg border border-border shadow-lg z-40 py-1">
-        <button
-          type="button"
-          onClick={() => onSelect({ type: "right-now" })}
-          className={menuItemClass(current.type === "right-now")}
-        >
-          Right now
-        </button>
+        {isToday ? (
+          <button
+            type="button"
+            onClick={() => onSelect({ type: "right-now" })}
+            className={menuItemClass(current.type === "right-now")}
+          >
+            Right now
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onSelect(getDefaultAvailability("at-time", current))}
+            className={menuItemClass(current.type === "at-time")}
+          >
+            At [time]
+          </button>
+        )}
 
         <button
           type="button"
@@ -660,6 +747,14 @@ function getDefaultAvailability(
     return { type: "right-now" };
   }
 
+  if (nextType === "at-time") {
+    if (current.type === "at-time") return current;
+    if (current.type === "time-range") return { type: "at-time", hour: current.startHour, min: current.startMin };
+    if (current.type === "duration-from") return { type: "at-time", hour: current.startHour, min: current.startMin };
+    const now = new Date();
+    return { type: "at-time", hour: now.getHours(), min: now.getMinutes() };
+  }
+
   if (nextType === "time-range") {
     if (current.type === "time-range") {
       return current;
@@ -672,6 +767,16 @@ function getDefaultAvailability(
         startMin: current.startMin,
         endHour: current.startHour + 2,
         endMin: current.startMin,
+      };
+    }
+
+    if (current.type === "at-time") {
+      return {
+        type: "time-range",
+        startHour: current.hour,
+        startMin: current.min,
+        endHour: current.hour + 2,
+        endMin: current.min,
       };
     }
 
@@ -704,6 +809,7 @@ function getDefaultAvailability(
     };
   }
 
+  // duration-from
   if (current.type === "duration-from") {
     return current;
   }
@@ -715,6 +821,16 @@ function getDefaultAvailability(
       minutes: current.minutes,
       startHour: 9,
       startMin: 0,
+    };
+  }
+
+  if (current.type === "at-time") {
+    return {
+      type: "duration-from",
+      hours: 1,
+      minutes: 0,
+      startHour: current.hour,
+      startMin: current.min,
     };
   }
 
