@@ -53,6 +53,52 @@ export async function getSuggestionLabels(page: Page, cfg: ScrapeConfig, xmlPars
 //
 // The endpoint returns JSON and takes the first match.
 
+// Reads the term selection cards on the criteria page and picks the most recent term.
+// Respects TERM_ID / TERM_LINK_TEXT env vars as hard overrides,
+// and TERM_SEASON (e.g. "Winter", "Fall") to prefer a specific season.
+export async function detectTerm(page: Page): Promise<{ termId: string; termLinkText: string }> {
+  if (process.env.TERM_ID && process.env.TERM_LINK_TEXT) {
+    return { termId: process.env.TERM_ID, termLinkText: process.env.TERM_LINK_TEXT };
+  }
+
+  await page.goto('https://mytimetable.mcmaster.ca/criteria.jsp');
+  const termLinks = page.locator('a.term-card-title');
+  await termLinks.first().waitFor({ state: 'visible' });
+
+  const terms = await termLinks.evaluateAll((els) => {
+    return els
+      .map((a) => {
+        const label = (a.textContent ?? '').trim();
+        const href = (a as HTMLAnchorElement).getAttribute('href') ?? '';
+        const m = href.match(/caseTermContinue\((\d+)\)/);
+        const id = m ? m[1] : null;
+        return id && label ? { id, label } : null;
+      })
+      .filter(Boolean) as { id: string; label: string }[];
+  });
+
+  if (!terms.length) throw new Error('No term cards found on criteria.jsp');
+
+  const yearFrom = (label: string) => { const m = label.match(/(20\d\d)/); return m ? Number(m[1]) : 0; };
+  const seasonRank = (label: string) => {
+    const l = label.toLowerCase();
+    if (l.includes('winter')) return 1;
+    if (l.includes('spring') || l.includes('summer')) return 2;
+    if (l.includes('fall')) return 3;
+    return 0;
+  };
+
+  const preferSeason = (process.env.TERM_SEASON ?? '').toLowerCase().trim();
+  const filtered = preferSeason ? terms.filter((t) => t.label.toLowerCase().includes(preferSeason)) : terms;
+
+  const picked = [...(filtered.length ? filtered : terms)].sort((a, b) => {
+    const yearDiff = yearFrom(b.label) - yearFrom(a.label);
+    return yearDiff !== 0 ? yearDiff : seasonRank(b.label) - seasonRank(a.label);
+  })[0];
+
+  return { termId: picked.id, termLinkText: picked.label };
+}
+
 export async function resolveCourse(page: Page, cfg: ScrapeConfig, humanCourse: string): Promise<ResolveResult> {
   const res = await page.request.post('https://mytimetable.mcmaster.ca/api/string-to-filter', {
     form: {

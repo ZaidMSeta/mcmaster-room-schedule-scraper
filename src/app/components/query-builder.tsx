@@ -20,7 +20,6 @@ export type AvailabilityMode =
       endHour: number;
       endMin: number;
     }
-  | { type: "duration"; hours: number; minutes: number }
   | {
       type: "duration-from";
       hours: number;
@@ -351,10 +350,14 @@ export function QueryBuilder({
                   hour={value.availability.endHour}
                   minute={value.availability.endMin}
                   onApply={(hour, minute) => {
+                    const startMins = value.availability.startHour * 60 + value.availability.startMin;
+                    const endMins = hour * 60 + minute;
+                    // clamp: end must be at least 30 min after start
+                    const clamped = Math.min(1410, endMins <= startMins ? startMins + 30 : endMins);
                     updateAvailability({
                       ...value.availability,
-                      endHour: hour,
-                      endMin: minute,
+                      endHour: Math.floor(clamped / 60),
+                      endMin: clamped % 60,
                     });
                     closeMenus();
                   }}
@@ -366,62 +369,6 @@ export function QueryBuilder({
           </>
         )}
 
-        {value.availability.type === "duration" && (
-          <>
-            <div className="relative inline-block">
-              <button
-                type="button"
-                onClick={() => openOnly("availability-mode")}
-                className={pillButtonClass}
-              >
-                for at least
-                <ChevronDown className="w-3.5 h-3.5 opacity-60" />
-              </button>
-
-              {openMenu === "availability-mode" && (
-                <AvailabilityModeMenu
-                  current={value.availability}
-                  onSelect={(next) => {
-                    updateAvailability(next);
-                    closeMenus();
-                  }}
-                  onClose={closeMenus}
-                  isToday={value.day === "today"}
-                />
-              )}
-            </div>
-
-            <div className="relative inline-block">
-              <button
-                type="button"
-                onClick={() => openOnly("duration")}
-                className={pillButtonClass}
-              >
-                {formatDuration(
-                  value.availability.hours,
-                  value.availability.minutes,
-                )}
-              </button>
-
-              {openMenu === "duration" && (
-                <DurationPopover
-                  hours={value.availability.hours}
-                  minutes={value.availability.minutes}
-                  onApply={(hours, minutes) => {
-                    updateAvailability({
-                      ...value.availability,
-                      hours,
-                      minutes,
-                    });
-                    closeMenus();
-                  }}
-                  onClose={closeMenus}
-                  isToday={value.day === "today"}
-                />
-              )}
-            </div>
-          </>
-        )}
 
         {value.availability.type === "duration-from" && (
           <>
@@ -568,14 +515,6 @@ function AvailabilityModeMenu({
           className={menuItemClass(current.type === "time-range")}
         >
           From [time] to [time]
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onSelect(getDefaultAvailability("duration", current))}
-          className={menuItemClass(current.type === "duration")}
-        >
-          For at least [duration]
         </button>
 
         <button
@@ -789,39 +728,9 @@ function getDefaultAvailability(
     };
   }
 
-  if (nextType === "duration") {
-    if (current.type === "duration") {
-      return current;
-    }
-
-    if (current.type === "duration-from") {
-      return {
-        type: "duration",
-        hours: current.hours,
-        minutes: current.minutes,
-      };
-    }
-
-    return {
-      type: "duration",
-      hours: 1,
-      minutes: 0,
-    };
-  }
-
   // duration-from
   if (current.type === "duration-from") {
     return current;
-  }
-
-  if (current.type === "duration") {
-    return {
-      type: "duration-from",
-      hours: current.hours,
-      minutes: current.minutes,
-      startHour: 9,
-      startMin: 0,
-    };
   }
 
   if (current.type === "at-time") {

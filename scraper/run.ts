@@ -16,7 +16,7 @@ import { getDefaultConfig, getPaths } from './config';
 import { ensureDirs, loadCourses, loadProcessed, appendResult, saveCourseXml } from './io';
 import { extractFirstXmlError, isNotAuthorized, isTimeTokenError } from './errors';
 import { installApiSafetyRoutes } from './safety';
-import { getSuggestionLabels, makeXmlParser, resolveCourse } from './api';
+import { detectTerm, getSuggestionLabels, makeXmlParser, resolveCourse } from './api';
 import { buildClassDataUrlFromTemplate, captureTemplateFromUI } from './template';
 
 // We capture a real class-data request once 
@@ -43,6 +43,13 @@ async function fetchClassDataUsingTemplate(page: Page, template: Template, cfg: 
 // - Append a structured record to NDJSON so it can resume.
 
 export async function runScrape(page: Page, cfg: ScrapeConfig = getDefaultConfig()) {
+  // Auto-detect term from the UI if not set via env vars or config
+  if (!cfg.termId) {
+    const detected = await detectTerm(page);
+    cfg = { ...cfg, ...detected };
+  }
+  console.log(`Term: ${cfg.termLinkText} (${cfg.termId})`);
+
   const paths = getPaths(cfg);
   await ensureDirs(paths);
   await installApiSafetyRoutes(page);

@@ -47,7 +47,6 @@ type RoomOutput = {
   buildingName: string;
   roomNumber: string;
   meetings: Meeting[];
-  schedule: Record<string, Meeting[]>;
 };
 
 const XML_ROOT = path.resolve(process.cwd(), "out", "xml");
@@ -535,7 +534,6 @@ function main() {
         buildingName: room.buildingName,
         roomNumber: room.roomNumber,
         meetings: sortedMeetings,
-        schedule: groupMeetingsByDay(sortedMeetings),
       };
     })
     .sort((a, b) => a.roomId.localeCompare(b.roomId));
