@@ -62,12 +62,14 @@ export function ResultsPage() {
   const [sortBy, setSortBy] = useState<"building" | "status">("status");
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [rawData, setRawData] = useState<RawRoomsFile | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     loadRoomsFile()
       .then((data) => setRawData(data))
       .catch((error) => {
         console.error("Failed to load rooms:", error);
+        setLoadError(true);
       });
   }, []);
 
@@ -323,7 +325,16 @@ export function ResultsPage() {
           </div>
         </div>
 
-        {!rawData ? (
+        {loadError ? (
+          <div className="bg-card rounded-xl border border-border shadow-sm p-12 text-center">
+            <p className="text-[15px] font-medium text-foreground mb-1">
+              Failed to load room data
+            </p>
+            <p className="text-[13px] text-muted-foreground">
+              Could not fetch rooms.json. Try refreshing the page.
+            </p>
+          </div>
+        ) : !rawData ? (
           <div className="bg-card rounded-xl border border-border shadow-sm p-12 text-center">
             <p className="text-[15px] font-medium text-foreground mb-1">
               Loading rooms...
