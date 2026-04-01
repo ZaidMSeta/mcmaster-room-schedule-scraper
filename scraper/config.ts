@@ -6,12 +6,13 @@
 import path from 'node:path';
 import type { Paths, ScrapeConfig } from './types';
 
-// returns current scrape settings for current term
-// TBA: auto update to new term
+// Returns scrape config. termId/termLinkText are left empty here so
+// run.ts auto-detects them from the live UI. Override via env vars:
+//   TERM_ID=3202610 TERM_LINK_TEXT="2026 Winter" TERM_SEASON=Fall
 export function getDefaultConfig(): ScrapeConfig {
   return {
-    termId: '3202610',          // replace later with auto-detect
-    termLinkText: 'Winter',     // replace later with auto-detect
+    termId: process.env.TERM_ID ?? '',
+    termLinkText: process.env.TERM_LINK_TEXT ?? '',
     cams: 'MCMSTiOFF_MCMSTiMCMST_MCMSTiMHK_MCMSTiSNPOL_MCMSTiCON',
     delayMs: 250,
   };

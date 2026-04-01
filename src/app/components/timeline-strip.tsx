@@ -6,8 +6,8 @@ interface TimelineStripProps {
   showNow?: boolean;
 }
 
-const DAY_START = 8; // 8 AM
-const DAY_END = 18; // 6 PM
+const DAY_START = 8;  // 8 AM
+const DAY_END = 22;  // 10 PM
 const TOTAL_HOURS = DAY_END - DAY_START;
 
 export function TimelineStrip({
@@ -97,7 +97,7 @@ export function TimelineStrip({
 
       {compact && (
         <div className="relative h-4 mt-0.5">
-          {[8, 12, 16].map((h) => {
+          {[8, 12, 17, 21].map((h) => {
             const pct = getPercent(h, 0);
             const label = h > 12 ? `${h - 12}p` : h === 12 ? "12p" : `${h}a`;
 

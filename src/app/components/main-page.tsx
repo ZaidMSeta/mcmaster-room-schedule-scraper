@@ -80,25 +80,6 @@ export function MainPage() {
       return true;
     }
 
-    if (avail.type === "duration") {
-      const requiredMins = avail.hours * 60 + avail.minutes;
-      const nowMins = currentHour * 60 + currentMin;
-      const sortedSlots = [...room.schedule].sort(
-        (a, b) => a.startHour * 60 + a.startMin - (b.startHour * 60 + b.startMin),
-      );
-      let lastEnd = nowMins;
-      for (const slot of sortedSlots) {
-        const slotStart = slot.startHour * 60 + slot.startMin;
-        const slotEnd = slot.endHour * 60 + slot.endMin;
-        if (slotStart >= nowMins) {
-          if (slotStart - lastEnd >= requiredMins) return true;
-          lastEnd = slotEnd;
-        } else if (slotEnd > nowMins) {
-          lastEnd = slotEnd;
-        }
-      }
-      return 22 * 60 - lastEnd >= requiredMins;
-    }
 
     if (avail.type === "duration-from") {
       const requiredMins = avail.hours * 60 + avail.minutes;

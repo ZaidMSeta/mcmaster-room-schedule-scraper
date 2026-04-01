@@ -10,6 +10,7 @@
     "build-rooms": "node --loader ts-node/esm scripts/buildRoomsJson.ts",
     "dev": "vite",
     "build": "vite build",
+    "build:full": "npm run build-rooms && vite build",
     "preview": "vite preview"
   },
   "keywords": [],
