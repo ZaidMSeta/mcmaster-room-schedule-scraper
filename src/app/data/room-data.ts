@@ -1,4 +1,5 @@
 import type { Room } from "./rooms";
+import type { Day } from "../components/query-builder";
 
 export interface RawMeeting {
   term: string;
