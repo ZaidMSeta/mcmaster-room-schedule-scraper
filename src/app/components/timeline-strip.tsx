@@ -3,6 +3,7 @@ import type { TimeSlot } from "../data/rooms";
 interface TimelineStripProps {
   schedule: TimeSlot[];
   compact?: boolean;
+  showNow?: boolean;
 }
 
 const DAY_START = 8; // 8 AM
@@ -12,6 +13,7 @@ const TOTAL_HOURS = DAY_END - DAY_START;
 export function TimelineStrip({
   schedule,
   compact = false,
+  showNow = true,
 }: TimelineStripProps) {
   const now = new Date();
   const currentHour = now.getHours();
@@ -82,7 +84,7 @@ export function TimelineStrip({
           );
         })}
 
-        {nowPercent >= 0 && nowPercent <= 100 && (
+        {showNow && nowPercent >= 0 && nowPercent <= 100 && (
           <div
             className="absolute top-0 h-full w-[2px] z-10"
             style={{

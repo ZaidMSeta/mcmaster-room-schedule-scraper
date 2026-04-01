@@ -6,6 +6,7 @@ interface RoomCardProps {
   room: Room;
   currentHour: number;
   currentMin: number;
+  showNow?: boolean;
   onClick?: () => void;
 }
 
@@ -47,6 +48,7 @@ export function RoomCard({
   room,
   currentHour,
   currentMin,
+  showNow = true,
   onClick,
 }: RoomCardProps) {
   const { status, label } = getRoomStatus(room, currentHour, currentMin);
@@ -103,9 +105,9 @@ export function RoomCard({
 
         <div>
           <p className="text-[11px] text-muted-foreground mb-1.5 uppercase tracking-wide">
-            Today's schedule
+            Schedule
           </p>
-          <TimelineStrip schedule={room.schedule} compact />
+          <TimelineStrip schedule={room.schedule} compact showNow={showNow} />
         </div>
       </div>
     </div>
