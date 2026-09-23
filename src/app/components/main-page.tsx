@@ -5,15 +5,30 @@ import {
   loadRoomsFile,
   getBuildingOptions,
   mapRawRoomToRoom,
-  dayToExportNumber,
+  dayToDate,
+  toIsoDate,
   type RawRoomsFile,
 } from "../data/room-data";
 import { QueryBuilder, QueryState } from "./query-builder";
 import { RoomCard } from "./room-card";
 import { RoomDetailPanel } from "./room-detail-panel";
 
+function formatDateLabel(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
+
 export function MainPage() {
-  const now = new Date();
+  // Re-render every 30s so "right now" statuses don't go stale while the page is open
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
   const currentHour = now.getHours();
   const currentMin = now.getMinutes();
 
@@ -23,7 +38,7 @@ export function MainPage() {
     availability: { type: "right-now" },
   });
   const [sortBy, setSortBy] = useState<"building" | "status">("status");
-  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [rawData, setRawData] = useState<RawRoomsFile | null>(null);
   const [loadError, setLoadError] = useState(false);
 
@@ -41,11 +56,25 @@ export function MainPage() {
     return getBuildingOptions(rawData);
   }, [rawData]);
 
+  const selectedDate = dayToDate(query.day, now);
+  const selectedIso = toIsoDate(selectedDate);
+
   const roomsForSelectedDay = useMemo(() => {
     if (!rawData) return [];
-    const dayNumber = dayToExportNumber(query.day);
-    return rawData.rooms.map((room) => mapRawRoomToRoom(room, dayNumber));
-  }, [rawData, query.day]);
+    return rawData.rooms.map((room) => mapRawRoomToRoom(room, selectedDate));
+    // selectedIso captures the date; selectedDate is a new object every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawData, selectedIso]);
+
+  // Derive from the current day's rooms so the panel follows day changes
+  const selectedRoom = selectedRoomId
+    ? roomsForSelectedDay.find((r) => r.id === selectedRoomId) ?? null
+    : null;
+
+  const outOfTerm =
+    !!rawData?.termStart &&
+    !!rawData?.termEnd &&
+    (selectedIso < rawData.termStart || selectedIso > rawData.termEnd);
 
   // reference time for status display — current time for "today", query time otherwise
   const refTime = useMemo(() => {
@@ -146,6 +175,12 @@ export function MainPage() {
           <p className="text-[15px] text-muted-foreground">
             Search available rooms across campus based on the class schedule.
           </p>
+          {rawData && (
+            <p className="text-[13px] text-muted-foreground mt-1">
+              {rawData.termName ? `${rawData.termName} timetable` : "Timetable"} · showing{" "}
+              {formatDateLabel(selectedIso)}
+            </p>
+          )}
         </div>
 
         <div className="bg-card rounded-xl border border-border shadow-sm p-5 mb-6">
@@ -178,6 +213,13 @@ export function MainPage() {
           </div>
         ) : (
           <>
+            {outOfTerm && (
+              <div className="rounded-xl border border-[#ffecb3] bg-[#fff8e1] px-4 py-3 mb-4 text-[13px] text-[#f57f17]">
+                Classes aren't in session on {formatDateLabel(selectedIso)} (
+                {rawData.termName ?? "this term"} runs {formatDateLabel(rawData.termStart!)} to{" "}
+                {formatDateLabel(rawData.termEnd!)}), so every room shows as free.
+              </div>
+            )}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
               <div className="flex items-baseline gap-2">
                 <span className="text-[15px] font-medium text-foreground">
@@ -243,7 +285,7 @@ export function MainPage() {
                     currentHour={refTime.hour}
                     currentMin={refTime.min}
                     showNow={query.day === "today"}
-                    onClick={() => setSelectedRoom(room)}
+                    onClick={() => setSelectedRoomId(room.id)}
                   />
                 ))}
               </div>
@@ -271,7 +313,10 @@ export function MainPage() {
       {selectedRoom && (
         <RoomDetailPanel
           room={selectedRoom}
-          onClose={() => setSelectedRoom(null)}
+          currentHour={refTime.hour}
+          currentMin={refTime.min}
+          dayLabel={query.day === "today" ? "today" : formatDateLabel(selectedIso).split(",")[0]}
+          onClose={() => setSelectedRoomId(null)}
         />
       )}
     </div>

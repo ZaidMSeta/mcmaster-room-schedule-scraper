@@ -5,6 +5,10 @@ import { TimelineStrip } from "./timeline-strip";
 
 interface RoomDetailPanelProps {
   room: Room;
+  // Reference time: the current time for today, or the queried time for other days
+  currentHour: number;
+  currentMin: number;
+  dayLabel: string; // "today" or a weekday name
   onClose: () => void;
 }
 
@@ -51,11 +55,12 @@ function getSummaryLine(
   statusLabel: string,
   currentHour: number,
   currentMin: number,
+  dayLabel: string,
 ): string {
   const nowMins = currentHour * 60 + currentMin;
 
   if (room.schedule.length === 0) {
-    return "No classes scheduled today. Available all day.";
+    return `No classes scheduled ${dayLabel}. Available all day.`;
   }
 
   if (status === "free") {
@@ -67,7 +72,7 @@ function getSummaryLine(
       );
 
     if (upcoming.length === 0) {
-      return "No more classes today. Free for the rest of the day.";
+      return `No more classes ${dayLabel}. Free for the rest of the day.`;
     }
 
     const next = upcoming[0];
@@ -210,10 +215,13 @@ function blockDurationMins(block: ScheduleBlock): number {
   return block.endHour * 60 + block.endMin - (block.startHour * 60 + block.startMin);
 }
 
-export function RoomDetailPanel({ room, onClose }: RoomDetailPanelProps) {
-  const now = new Date();
-  const currentHour = now.getHours();
-  const currentMin = now.getMinutes();
+export function RoomDetailPanel({
+  room,
+  currentHour,
+  currentMin,
+  dayLabel,
+  onClose,
+}: RoomDetailPanelProps) {
   const nowMins = currentHour * 60 + currentMin;
 
   const { status, label: statusLabel } = getRoomStatus(
@@ -229,6 +237,7 @@ export function RoomDetailPanel({ room, onClose }: RoomDetailPanelProps) {
     statusLabel,
     currentHour,
     currentMin,
+    dayLabel,
   );
   const blocks = buildScheduleBlocks(room, currentHour, currentMin);
 
@@ -307,14 +316,14 @@ export function RoomDetailPanel({ room, onClose }: RoomDetailPanelProps) {
               </span>
               <span>
                 {totalClasses === 0
-                  ? "No classes today"
+                  ? `No classes ${dayLabel}`
                   : `${remainingClasses} of ${totalClasses} class${totalClasses !== 1 ? "es" : ""} remaining`}
               </span>
             </div>
           </div>
 
           <div className="px-6 pb-2">
-            <TimelineStrip schedule={room.schedule} />
+            <TimelineStrip schedule={room.schedule} showNow={dayLabel === "today"} />
           </div>
 
           <div className="mx-6 my-4 border-t border-border" />

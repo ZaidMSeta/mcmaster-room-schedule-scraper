@@ -15,6 +15,8 @@ type Timeblock = {
   day: number;
   t1: number;
   t2: number;
+  startDate: string;
+  endDate: string;
 };
 
 type Meeting = {
@@ -29,6 +31,8 @@ type Meeting = {
   startMinute: number;
   endHour: number;
   endMinute: number;
+  startDate: string; // YYYY-MM-DD, first date this meeting happens
+  endDate: string;   // YYYY-MM-DD, last date this meeting happens
   label: string;
   teachers: string[];
 };
@@ -52,6 +56,13 @@ type RoomOutput = {
 const XML_ROOT = path.resolve(process.cwd(), "out", "xml");
 const termArg = process.argv[2];
 const OUTPUT_FILE = path.resolve(process.cwd(), "public", "rooms.json");
+
+// MyTimetable encodes dates as days since 2007-12-31 (e.g. d1="6819" -> 2026-09-01).
+const MT_EPOCH_MS = Date.UTC(2007, 11, 31);
+
+function mtDayToIso(day: number): string {
+  return new Date(MT_EPOCH_MS + day * 86_400_000).toISOString().slice(0, 10);
+}
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -106,13 +117,16 @@ function resolveInputDir(): string {
     .readdirSync(XML_ROOT, { withFileTypes: true })
     .filter((entry) => entry.isDirectory());
 
-  if (entries.length === 1) {
-    return path.resolve(XML_ROOT, entries[0].name);
+  if (entries.length === 0) {
+    throw new Error(`No term folders found in ${XML_ROOT}. Run the scraper first.`);
   }
 
-  throw new Error(
-    `No term folder argument provided, and could not uniquely determine one from ${XML_ROOT}`
-  );
+  // Term ids increase over time (3202610 = 2026 Winter, 3202630 = 2026 Fall), so default to the newest
+  const newest = entries.map((e) => e.name).sort((a, b) => Number(b) - Number(a))[0];
+  if (entries.length > 1) {
+    console.log(`Multiple term folders found; using newest (${newest}). Pass a folder name to override.`);
+  }
+  return path.resolve(XML_ROOT, newest);
 }
 
 function buildCourseLabel(courseNode: AttrNode): string {
@@ -155,6 +169,11 @@ function parseSingleLocation(location: string): ParsedLocation | null {
   const roomNumber = codeAndRoom.slice(underscoreIndex + 1).trim();
 
   if (!buildingCode || !roomNumber) return null;
+
+  // Placeholders, not bookable rooms: "Mohawk College - MHK_CAMPUS", "McMaster - SEE_NOTES"
+  if (roomNumber.toUpperCase() === "CAMPUS" || codeAndRoom.toUpperCase() === "SEE_NOTES") {
+    return null;
+  }
 
   return {
     buildingName,
@@ -389,6 +408,7 @@ function main() {
 
   const roomMap = new Map<string, RoomRecord>();
   const meetingDedup = new Set<string>();
+  let termName = "";
 
   for (const filePath of xmlFiles) {
     const xml = fs.readFileSync(filePath, "utf8");
@@ -400,6 +420,7 @@ function main() {
     const term = safeString(
       classdata.term?.n ?? classdata.term?.strm ?? path.basename(inputDir)
     );
+    if (!termName) termName = safeString(classdata.term?.v);
 
     const courses = asArray<AttrNode>(classdata.course);
 
@@ -422,12 +443,14 @@ function main() {
           const day = safeNumber(tb.day);
           const t1 = safeNumber(tb.t1);
           const t2 = safeNumber(tb.t2);
+          const d1 = safeNumber(tb.d1);
+          const d2 = safeNumber(tb.d2);
 
-          if (!id || Number.isNaN(day) || Number.isNaN(t1) || Number.isNaN(t2)) {
+          if (!id || [day, t1, t2, d1, d2].some(Number.isNaN)) {
             continue;
           }
 
-          timeblockMap.set(id, { id, day, t1, t2 });
+          timeblockMap.set(id, { id, day, t1, t2, startDate: mtDayToIso(d1), endDate: mtDayToIso(d2) });
         }
 
         const blocks = asArray<AttrNode>(
@@ -478,6 +501,8 @@ function main() {
                 tb.day,
                 tb.t1,
                 tb.t2,
+                tb.startDate,
+                tb.endDate,
               ].join("|");
 
               if (meetingDedup.has(dedupeKey)) continue;
@@ -507,6 +532,8 @@ function main() {
                 startMinute,
                 endHour,
                 endMinute,
+                startDate: tb.startDate,
+                endDate: tb.endDate,
                 label: buildMeetingLabel(courseLabel, component, section),
                 teachers,
               });
@@ -553,8 +580,22 @@ function main() {
     a.code.localeCompare(b.code)
   );
 
+  if (roomsArray.length === 0) {
+    throw new Error(
+      `No rooms found in ${xmlFiles.length} XML files. MyTimetable hides locations from ` +
+        `logged-out requests, so the auth session probably expired: re-run npm run auth:setup and scrape again.`
+    );
+  }
+
+  const allMeetings = roomsArray.flatMap((room) => room.meetings);
+  const termStart = allMeetings.reduce((min, m) => (m.startDate < min ? m.startDate : min), allMeetings[0].startDate);
+  const termEnd = allMeetings.reduce((max, m) => (m.endDate > max ? m.endDate : max), allMeetings[0].endDate);
+
   const output = {
     term: roomsArray[0]?.meetings[0]?.term ?? path.basename(inputDir),
+    termName,
+    termStart,
+    termEnd,
     sourceFolder: path.basename(inputDir),
     generatedAt: new Date().toISOString(),
     buildings,
@@ -567,6 +608,7 @@ function main() {
   console.log(`Parsed ${xmlFiles.length} XML files`);
   console.log(`Built ${roomsArray.length} rooms`);
   console.log(`Built ${buildings.length} buildings`);
+  console.log(`Term: ${termName || output.term} (${termStart} to ${termEnd})`);
   console.log(`Wrote ${OUTPUT_FILE}`);
 
   printBuildSummary(
