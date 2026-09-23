@@ -84,6 +84,6 @@
     "tailwindcss": "4.1.12",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
-    "vite": "6.3.5"
+    "vite": "6.4.3"
   }
 }
