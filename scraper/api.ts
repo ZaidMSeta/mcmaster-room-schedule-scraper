@@ -46,14 +46,40 @@ export async function getSuggestionLabels(page: Page, cfg: ScrapeConfig, xmlPars
   const items = Array.isArray(rs) ? rs : rs ? [rs] : [];
   return items.map((it: any) => it['#text']).filter(Boolean);
 }
-// Resolve a human readable course code into the internal
-// identifiers required by /api/class-data:
-// - cnKey: internal course key
-// - va: value the backend expects alongside cnKey (not sure what it represents)
-//
-// The endpoint returns JSON and takes the first match.
+// MyTimetable encodes dates as days since 2007-12-31 (e.g. d1="6819" -> 2026-09-01).
+const MT_EPOCH_MS = Date.UTC(2007, 11, 31);
+function todayMtDay(): number {
+  const now = new Date();
+  return Math.floor((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - MT_EPOCH_MS) / 86_400_000);
+}
 
-// Reads the term selection cards on the criteria page and picks the most recent term.
+type TermInfo = { id: string; name: string; d1: number; d2: number };
+
+// criteria.jsp embeds every available term as EE.initEntrance({ "<termId>": { name, d1, d2, ... } }).
+async function listTerms(page: Page): Promise<TermInfo[]> {
+  const res = await page.request.get('https://mytimetable.mcmaster.ca/criteria.jsp');
+  const html = await res.text();
+  const marker = 'EE.initEntrance(';
+  const idx = html.indexOf(marker);
+  if (idx < 0) throw new Error('Could not find EE.initEntrance() in criteria.jsp');
+
+  // Walk braces to extract the JSON object argument
+  const start = idx + marker.length;
+  let depth = 0;
+  let end = start;
+  for (let i = start; i < html.length; i++) {
+    if (html[i] === '{') depth++;
+    else if (html[i] === '}' && --depth === 0) { end = i + 1; break; }
+  }
+  const data = JSON.parse(html.slice(start, end)) as Record<string, { name?: string; d1?: string; d2?: string }>;
+
+  return Object.entries(data)
+    .filter(([id, info]) => id && info?.name)
+    .map(([id, info]) => ({ id, name: info.name!, d1: Number(info.d1), d2: Number(info.d2) }))
+    .sort((a, b) => a.d1 - b.d1);
+}
+
+// Picks the term that is in session today (or the next one to start).
 // Respects TERM_ID / TERM_LINK_TEXT env vars as hard overrides,
 // and TERM_SEASON (e.g. "Winter", "Fall") to prefer a specific season.
 export async function detectTerm(page: Page): Promise<{ termId: string; termLinkText: string }> {
@@ -61,44 +87,78 @@ export async function detectTerm(page: Page): Promise<{ termId: string; termLink
     return { termId: process.env.TERM_ID, termLinkText: process.env.TERM_LINK_TEXT };
   }
 
-  await page.goto('https://mytimetable.mcmaster.ca/criteria.jsp');
-  const termLinks = page.locator('a.term-card-title');
-  await termLinks.first().waitFor({ state: 'visible' });
+  const terms = await listTerms(page);
+  if (!terms.length) throw new Error('No terms found on criteria.jsp');
 
-  const terms = await termLinks.evaluateAll((els) => {
-    return els
-      .map((a) => {
-        const label = (a.textContent ?? '').trim();
-        const href = (a as HTMLAnchorElement).getAttribute('href') ?? '';
-        const m = href.match(/caseTermContinue\((\d+)\)/);
-        const id = m ? m[1] : null;
-        return id && label ? { id, label } : null;
-      })
-      .filter(Boolean) as { id: string; label: string }[];
-  });
-
-  if (!terms.length) throw new Error('No term cards found on criteria.jsp');
-
-  const yearFrom = (label: string) => { const m = label.match(/(20\d\d)/); return m ? Number(m[1]) : 0; };
-  const seasonRank = (label: string) => {
-    const l = label.toLowerCase();
-    if (l.includes('winter')) return 1;
-    if (l.includes('spring') || l.includes('summer')) return 2;
-    if (l.includes('fall')) return 3;
-    return 0;
-  };
+  if (process.env.TERM_ID) {
+    const match = terms.find((t) => t.id === process.env.TERM_ID);
+    if (!match) throw new Error(`TERM_ID=${process.env.TERM_ID} not found; available: ${terms.map((t) => `${t.id} (${t.name})`).join(', ')}`);
+    return { termId: match.id, termLinkText: match.name };
+  }
 
   const preferSeason = (process.env.TERM_SEASON ?? '').toLowerCase().trim();
-  const filtered = preferSeason ? terms.filter((t) => t.label.toLowerCase().includes(preferSeason)) : terms;
+  const candidates = preferSeason ? terms.filter((t) => t.name.toLowerCase().includes(preferSeason)) : terms;
+  if (!candidates.length) throw new Error(`No term matching TERM_SEASON="${preferSeason}"`);
 
-  const picked = [...(filtered.length ? filtered : terms)].sort((a, b) => {
-    const yearDiff = yearFrom(b.label) - yearFrom(a.label);
-    return yearDiff !== 0 ? yearDiff : seasonRank(b.label) - seasonRank(a.label);
-  })[0];
+  const today = todayMtDay();
+  const picked =
+    candidates.find((t) => t.d1 <= today && today <= t.d2) ??
+    candidates.find((t) => t.d1 > today) ??
+    candidates[candidates.length - 1];
 
-  return { termId: picked.id, termLinkText: picked.label };
+  return { termId: picked.id, termLinkText: picked.name };
 }
 
+// Lists every course offered in the term via the suggestions endpoint (20 per page).
+// Results for the requested term come first, followed by courses only offered in
+// other terms (info prefixed "(2027 Winter only)"), which are skipped. The "_more_"
+// marker stops appearing partway through, so paginate until a page comes back empty.
+export async function listTermCourses(page: Page, cfg: ScrapeConfig, xmlParser: XMLParser): Promise<string[]> {
+  const courses = new Set<string>();
+
+  for (let pageNum = 0; ; pageNum++) {
+    const url =
+      `https://mytimetable.mcmaster.ca/api/courses/suggestions` +
+      `?term=${cfg.termId}` +
+      `&cams=${cfg.cams}` +
+      `&course_add=%20` +
+      `&page_num=${pageNum}&sio=1` +
+      nwindow();
+
+    const res = await page.request.get(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    if (res.status() !== 200) throw new Error(`suggestions page ${pageNum} returned HTTP ${res.status()}`);
+
+    const rs = xmlParser.parse(await res.text())?.add_suggest?.results?.rs;
+    const items: any[] = Array.isArray(rs) ? rs : rs ? [rs] : [];
+    const real = items.filter((it) => it['#text'] && it['#text'] !== '_more_');
+    if (!real.length) break;
+
+    for (const it of real) {
+      const info = String(it['@_info'] ?? '');
+      const onlyPrefix = info.match(/^\(([^)]*only)\)/);
+      if (onlyPrefix && !onlyPrefix[1].includes(cfg.termLinkText)) continue;
+      courses.add(String(it['#text']).trim().replace(/\s+/g, ' '));
+    }
+
+    await page.waitForTimeout(100);
+  }
+
+  return [...courses].sort();
+}
+
+// Time-window validation params the web UI appends to API calls.
+function nwindow(): string {
+  const t = Math.floor(Date.now() / 60000) % 1000;
+  const e = (t % 3) + (t % 39) + (t % 42);
+  return `&t=${t}&e=${e}`;
+}
+
+// Resolve a human readable course code into the internal
+// identifiers required by /api/class-data:
+// - cnKey: internal course key
+// - va: value the backend expects alongside cnKey (not sure what it represents)
+//
+// The endpoint returns JSON and takes the first match.
 export async function resolveCourse(page: Page, cfg: ScrapeConfig, humanCourse: string): Promise<ResolveResult> {
   const res = await page.request.post('https://mytimetable.mcmaster.ca/api/string-to-filter', {
     form: {

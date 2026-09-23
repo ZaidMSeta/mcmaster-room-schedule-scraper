@@ -3,7 +3,7 @@
  * 
  * Contains all filesystem I/O for scraper
  * - create output directories
- * - read courses.txt input (TBA change to automatically grab from academic calender, maybe union with list made from auto complete on timetable?)
+ * - read an optional course list file (COURSES_FILE) instead of the live term listing
  * - append results to NDJSON log
  * - load processed course codes from NDJSON log
  * - write raw XML responses to out/xml
@@ -17,7 +17,7 @@ import type { Paths } from './types';
 export async function ensureDirs(paths: Paths) {
   await fs.mkdir(paths.xmlDir, { recursive: true });
 }
-// Read courses.txt into a normalized list of course codes.
+// Read a course list file (one code per line) into a normalized list of course codes.
 // Trims whitespace and collapses multiple spaces.
 export async function loadCourses(coursesPath: string): Promise<string[]> {
   const raw = await fs.readFile(coursesPath, 'utf8');
@@ -28,7 +28,7 @@ export async function loadCourses(coursesPath: string): Promise<string[]> {
     .map((s) => s.replace(/\s+/g, ' '));
 
   if (courses.length === 0) {
-    throw new Error('courses.txt is empty (no course codes to process).');
+    throw new Error(`${coursesPath} is empty (no course codes to process).`);
   }
   return courses;
 }
