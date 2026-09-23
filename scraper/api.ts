@@ -109,6 +109,50 @@ export async function detectTerm(page: Page): Promise<{ termId: string; termLink
   return { termId: picked.id, termLinkText: picked.name };
 }
 
+// Lists every course offered in the term via the suggestions endpoint (20 per page).
+// Results for the requested term come first, followed by courses only offered in
+// other terms (info prefixed "(2027 Winter only)"), which are skipped. The "_more_"
+// marker stops appearing partway through, so paginate until a page comes back empty.
+export async function listTermCourses(page: Page, cfg: ScrapeConfig, xmlParser: XMLParser): Promise<string[]> {
+  const courses = new Set<string>();
+
+  for (let pageNum = 0; ; pageNum++) {
+    const url =
+      `https://mytimetable.mcmaster.ca/api/courses/suggestions` +
+      `?term=${cfg.termId}` +
+      `&cams=${cfg.cams}` +
+      `&course_add=%20` +
+      `&page_num=${pageNum}&sio=1` +
+      nwindow();
+
+    const res = await page.request.get(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    if (res.status() !== 200) throw new Error(`suggestions page ${pageNum} returned HTTP ${res.status()}`);
+
+    const rs = xmlParser.parse(await res.text())?.add_suggest?.results?.rs;
+    const items: any[] = Array.isArray(rs) ? rs : rs ? [rs] : [];
+    const real = items.filter((it) => it['#text'] && it['#text'] !== '_more_');
+    if (!real.length) break;
+
+    for (const it of real) {
+      const info = String(it['@_info'] ?? '');
+      const onlyPrefix = info.match(/^\(([^)]*only)\)/);
+      if (onlyPrefix && !onlyPrefix[1].includes(cfg.termLinkText)) continue;
+      courses.add(String(it['#text']).trim().replace(/\s+/g, ' '));
+    }
+
+    await page.waitForTimeout(100);
+  }
+
+  return [...courses].sort();
+}
+
+// Time-window validation params the web UI appends to API calls.
+function nwindow(): string {
+  const t = Math.floor(Date.now() / 60000) % 1000;
+  const e = (t % 3) + (t % 39) + (t % 42);
+  return `&t=${t}&e=${e}`;
+}
+
 // Resolve a human readable course code into the internal
 // identifiers required by /api/class-data:
 // - cnKey: internal course key

@@ -14,7 +14,6 @@ export type ScrapeConfig = {
   };
   
   export type Paths = {
-    coursesPath: string;
     outDir: string;
     xmlDir: string;
     resultsPath: string;

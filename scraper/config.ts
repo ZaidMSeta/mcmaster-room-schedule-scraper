@@ -21,9 +21,8 @@ export function getDefaultConfig(): ScrapeConfig {
 // Computes abs path derived from config
 // Writes XML to out/xml/<TERM_ID>/ and logs results to out/results_<TERM_ID>.ndjson
 export function getPaths(cfg: ScrapeConfig): Paths {
-  const coursesPath = path.join(process.cwd(), 'courses.txt');
   const outDir = path.join(process.cwd(), 'out');
   const xmlDir = path.join(outDir, 'xml', cfg.termId);
   const resultsPath = path.join(outDir, `results_${cfg.termId}.ndjson`);
-  return { coursesPath, outDir, xmlDir, resultsPath };
+  return { outDir, xmlDir, resultsPath };
 }

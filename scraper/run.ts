@@ -2,7 +2,7 @@
  * run.ts
  *
  * Runs the end-to-end scrape:
- * - loads input courses and resume state
+ * - lists every course offered in the term (or reads COURSES_FILE) and loads resume state
  * - captures a template class-data URL from the UI
  * - resolves each human course code -> (cnKey, va)
  * - fetches /api/class-data for that course using the template params
@@ -16,7 +16,7 @@ import { getDefaultConfig, getPaths } from './config';
 import { ensureDirs, loadCourses, loadProcessed, appendResult, saveCourseXml } from './io';
 import { extractFirstXmlError, isNotAuthorized, isTimeTokenError } from './errors';
 import { installApiSafetyRoutes } from './safety';
-import { detectTerm, getSuggestionLabels, makeXmlParser, resolveCourse } from './api';
+import { detectTerm, getSuggestionLabels, listTermCourses, makeXmlParser, resolveCourse } from './api';
 import { buildClassDataUrlFromTemplate, captureTemplateFromUI } from './template';
 
 // We capture a real class-data request once 
@@ -54,10 +54,13 @@ export async function runScrape(page: Page, cfg: ScrapeConfig = getDefaultConfig
   await ensureDirs(paths);
   await installApiSafetyRoutes(page);
 
-  const courses = await loadCourses(paths.coursesPath);
-  const processed = await loadProcessed(paths.resultsPath);
-
   const xmlParser = makeXmlParser();
+
+  const courses = process.env.COURSES_FILE
+    ? await loadCourses(process.env.COURSES_FILE)
+    : await listTermCourses(page, cfg, xmlParser);
+  console.log(`Courses to scrape: ${courses.length}`);
+  const processed = await loadProcessed(paths.resultsPath);
 
   // Suggestions pool for picking a label to trigger class-data (token/template capture)
   let suggestionLabels = await getSuggestionLabels(page, cfg, xmlParser);
