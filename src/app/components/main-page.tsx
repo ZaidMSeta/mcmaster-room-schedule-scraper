@@ -38,7 +38,7 @@ export function MainPage() {
     availability: { type: "right-now" },
   });
   const [sortBy, setSortBy] = useState<"building" | "status">("status");
-  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [rawData, setRawData] = useState<RawRoomsFile | null>(null);
   const [loadError, setLoadError] = useState(false);
 
@@ -65,6 +65,11 @@ export function MainPage() {
     // selectedIso captures the date; selectedDate is a new object every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawData, selectedIso]);
+
+  // Derive from the current day's rooms so the panel follows day changes
+  const selectedRoom = selectedRoomId
+    ? roomsForSelectedDay.find((r) => r.id === selectedRoomId) ?? null
+    : null;
 
   const outOfTerm =
     !!rawData?.termStart &&
@@ -280,7 +285,7 @@ export function MainPage() {
                     currentHour={refTime.hour}
                     currentMin={refTime.min}
                     showNow={query.day === "today"}
-                    onClick={() => setSelectedRoom(room)}
+                    onClick={() => setSelectedRoomId(room.id)}
                   />
                 ))}
               </div>
@@ -308,7 +313,10 @@ export function MainPage() {
       {selectedRoom && (
         <RoomDetailPanel
           room={selectedRoom}
-          onClose={() => setSelectedRoom(null)}
+          currentHour={refTime.hour}
+          currentMin={refTime.min}
+          dayLabel={query.day === "today" ? "today" : formatDateLabel(selectedIso).split(",")[0]}
+          onClose={() => setSelectedRoomId(null)}
         />
       )}
     </div>
