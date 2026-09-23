@@ -11,6 +11,8 @@ export interface Room {
   building: string;
   buildingCode: string;
   roomNumber: string;
+  // Every class booked here this term is a lab, so it's likely locked outside class times
+  isLab: boolean;
   schedule: TimeSlot[];
 }
 
