@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "auth:setup": "PWDEBUG=1 playwright test tests/auth.setup.spec.ts --project=chromium --headed",
+    "auth:setup": "playwright test tests/auth.setup.spec.ts --project=chromium --headed",
     "scrape": "playwright test tests/scrape.spec.ts --reporter=line",
     "build-rooms": "node --loader ts-node/esm scripts/buildRoomsJson.ts",
     "dev": "vite",
