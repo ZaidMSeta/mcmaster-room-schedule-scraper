@@ -83,6 +83,8 @@ export function QueryBuilder({
   const pillButtonClass = getPillButtonClass(isCompact);
   const pillStaticClass = getPillStaticClass(isCompact);
   const textClass = isCompact ? "text-[14px]" : "text-[17px]";
+  // const binding keeps the discriminated-union narrowing inside callbacks
+  const avail = value.availability;
 
   return (
     <div className={isCompact ? "relative" : ""}>
@@ -169,16 +171,16 @@ export function QueryBuilder({
                     type="button"
                     onClick={() => {
                       const newDay = day.value;
-                      let newAvailability = value.availability;
+                      let newAvailability = avail;
 
                       // switching away from today: right-now doesn't apply, default to at-time
-                      if (newDay !== "today" && value.availability.type === "right-now") {
+                      if (newDay !== "today" && avail.type === "right-now") {
                         const now = new Date();
                         newAvailability = { type: "at-time", hour: now.getHours(), min: now.getMinutes() };
                       }
 
                       // switching back to today: at-time becomes right-now
-                      if (newDay === "today" && value.availability.type === "at-time") {
+                      if (newDay === "today" && avail.type === "at-time") {
                         newAvailability = { type: "right-now" };
                       }
 
@@ -201,7 +203,7 @@ export function QueryBuilder({
 
         <span className={`${textClass} text-muted-foreground`}>that is free</span>
 
-        {value.availability.type === "right-now" && (
+        {avail.type === "right-now" && (
           <div className="relative inline-block">
             <button
               type="button"
@@ -214,7 +216,7 @@ export function QueryBuilder({
 
             {openMenu === "availability-mode" && (
               <AvailabilityModeMenu
-                current={value.availability}
+                current={avail}
                 onSelect={(next) => {
                   updateAvailability(next);
                   closeMenus();
@@ -226,7 +228,7 @@ export function QueryBuilder({
           </div>
         )}
 
-        {value.availability.type === "at-time" && (
+        {avail.type === "at-time" && (
           <>
             <div className="relative inline-block">
               <button
@@ -240,7 +242,7 @@ export function QueryBuilder({
 
               {openMenu === "availability-mode" && (
                 <AvailabilityModeMenu
-                  current={value.availability}
+                  current={avail}
                   onSelect={(next) => {
                     updateAvailability(next);
                     closeMenus();
@@ -257,27 +259,26 @@ export function QueryBuilder({
                 onClick={() => openOnly("start-time")}
                 className={pillButtonClass}
               >
-                {formatTime(value.availability.hour, value.availability.min)}
+                {formatTime(avail.hour, avail.min)}
               </button>
 
               {openMenu === "start-time" && (
                 <TimePopover
                   label="Time"
-                  hour={value.availability.hour}
-                  minute={value.availability.min}
+                  hour={avail.hour}
+                  minute={avail.min}
                   onApply={(hour, minute) => {
-                    updateAvailability({ ...value.availability, hour, min: minute });
+                    updateAvailability({ type: "at-time", hour, min: minute });
                     closeMenus();
                   }}
                   onClose={closeMenus}
-                  isToday={value.day === "today"}
                 />
               )}
             </div>
           </>
         )}
 
-        {value.availability.type === "time-range" && (
+        {avail.type === "time-range" && (
           <>
             <div className="relative inline-block">
               <button
@@ -291,7 +292,7 @@ export function QueryBuilder({
 
               {openMenu === "availability-mode" && (
                 <AvailabilityModeMenu
-                  current={value.availability}
+                  current={avail}
                   onSelect={(next) => {
                     updateAvailability(next);
                     closeMenus();
@@ -309,26 +310,25 @@ export function QueryBuilder({
                 className={pillButtonClass}
               >
                 {formatTime(
-                  value.availability.startHour,
-                  value.availability.startMin,
+                  avail.startHour,
+                  avail.startMin,
                 )}
               </button>
 
               {openMenu === "start-time" && (
                 <TimePopover
                   label="Start time"
-                  hour={value.availability.startHour}
-                  minute={value.availability.startMin}
+                  hour={avail.startHour}
+                  minute={avail.startMin}
                   onApply={(hour, minute) => {
                     updateAvailability({
-                      ...value.availability,
+                      ...avail,
                       startHour: hour,
                       startMin: minute,
                     });
                     closeMenus();
                   }}
                   onClose={closeMenus}
-                  isToday={value.day === "today"}
                 />
               )}
             </div>
@@ -341,28 +341,27 @@ export function QueryBuilder({
                 onClick={() => openOnly("end-time")}
                 className={pillButtonClass}
               >
-                {formatTime(value.availability.endHour, value.availability.endMin)}
+                {formatTime(avail.endHour, avail.endMin)}
               </button>
 
               {openMenu === "end-time" && (
                 <TimePopover
                   label="End time"
-                  hour={value.availability.endHour}
-                  minute={value.availability.endMin}
+                  hour={avail.endHour}
+                  minute={avail.endMin}
                   onApply={(hour, minute) => {
-                    const startMins = value.availability.startHour * 60 + value.availability.startMin;
+                    const startMins = avail.startHour * 60 + avail.startMin;
                     const endMins = hour * 60 + minute;
                     // clamp: end must be at least 30 min after start
                     const clamped = Math.min(1410, endMins <= startMins ? startMins + 30 : endMins);
                     updateAvailability({
-                      ...value.availability,
+                      ...avail,
                       endHour: Math.floor(clamped / 60),
                       endMin: clamped % 60,
                     });
                     closeMenus();
                   }}
                   onClose={closeMenus}
-                  isToday={value.day === "today"}
                 />
               )}
             </div>
@@ -370,7 +369,7 @@ export function QueryBuilder({
         )}
 
 
-        {value.availability.type === "duration-from" && (
+        {avail.type === "duration-from" && (
           <>
             <div className="relative inline-block">
               <button
@@ -384,7 +383,7 @@ export function QueryBuilder({
 
               {openMenu === "availability-mode" && (
                 <AvailabilityModeMenu
-                  current={value.availability}
+                  current={avail}
                   onSelect={(next) => {
                     updateAvailability(next);
                     closeMenus();
@@ -402,25 +401,24 @@ export function QueryBuilder({
                 className={pillButtonClass}
               >
                 {formatDuration(
-                  value.availability.hours,
-                  value.availability.minutes,
+                  avail.hours,
+                  avail.minutes,
                 )}
               </button>
 
               {openMenu === "duration" && (
                 <DurationPopover
-                  hours={value.availability.hours}
-                  minutes={value.availability.minutes}
+                  hours={avail.hours}
+                  minutes={avail.minutes}
                   onApply={(hours, minutes) => {
                     updateAvailability({
-                      ...value.availability,
+                      ...avail,
                       hours,
                       minutes,
                     });
                     closeMenus();
                   }}
                   onClose={closeMenus}
-                  isToday={value.day === "today"}
                 />
               )}
             </div>
@@ -436,26 +434,25 @@ export function QueryBuilder({
                 className={pillButtonClass}
               >
                 {formatTime(
-                  value.availability.startHour,
-                  value.availability.startMin,
+                  avail.startHour,
+                  avail.startMin,
                 )}
               </button>
 
               {openMenu === "start-time" && (
                 <TimePopover
                   label="Start time"
-                  hour={value.availability.startHour}
-                  minute={value.availability.startMin}
+                  hour={avail.startHour}
+                  minute={avail.startMin}
                   onApply={(hour, minute) => {
                     updateAvailability({
-                      ...value.availability,
+                      ...avail,
                       startHour: hour,
                       startMin: minute,
                     });
                     closeMenus();
                   }}
                   onClose={closeMenus}
-                  isToday={value.day === "today"}
                 />
               )}
             </div>
