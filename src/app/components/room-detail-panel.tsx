@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { X, Building2, Clock } from "lucide-react";
 import { Room, getRoomStatus, RoomStatus, formatTime } from "../data/rooms";
 import { TimelineStrip } from "./timeline-strip";
+import { LabTag } from "./room-card";
 
 interface RoomDetailPanelProps {
   room: Room;
@@ -279,6 +280,11 @@ export function RoomDetailPanel({
                 <Building2 className="w-3.5 h-3.5" />
                 {room.building}
               </div>
+              {room.isLab && (
+                <div className="mt-2">
+                  <LabTag />
+                </div>
+              )}
             </div>
 
             <button

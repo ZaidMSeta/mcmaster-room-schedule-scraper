@@ -97,6 +97,9 @@ export function mapRawRoomToRoom(rawRoom: RawRoom, date: Date): Room {
     building: rawRoom.buildingName,
     buildingCode: rawRoom.buildingCode,
     roomNumber: rawRoom.roomNumber,
+    isLab:
+      rawRoom.meetings.length > 0 &&
+      rawRoom.meetings.every((meeting) => meeting.component === "LAB"),
     schedule: rawRoom.meetings
       .filter((meeting) => meeting.day === dayNumber && meetingRunsOn(meeting, isoDate))
       .map((meeting) => ({

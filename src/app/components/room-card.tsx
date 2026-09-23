@@ -1,6 +1,6 @@
 import { Room, getRoomStatus, RoomStatus } from "../data/rooms";
 import { TimelineStrip } from "./timeline-strip";
-import { Clock, CircleCheck, CircleAlert, Timer } from "lucide-react";
+import { Clock, CircleCheck, CircleAlert, Timer, FlaskConical } from "lucide-react";
 
 interface RoomCardProps {
   room: Room;
@@ -44,6 +44,18 @@ const statusConfig: Record<
   },
 };
 
+export function LabTag() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground text-[11px] font-medium"
+      title="Only used for labs this term, so it may be locked outside class times"
+    >
+      <FlaskConical className="w-3 h-3" />
+      Lab – may be locked
+    </span>
+  );
+}
+
 export function RoomCard({
   room,
   currentHour,
@@ -84,6 +96,7 @@ export function RoomCard({
               <span className="text-[17px] font-medium text-foreground tracking-tight">
                 {room.buildingCode} {room.roomNumber}
               </span>
+              {room.isLab && <LabTag />}
             </div>
             <p className="text-[13px] text-muted-foreground mt-0.5">
               {room.building}
