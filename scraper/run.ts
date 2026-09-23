@@ -44,7 +44,7 @@ async function fetchClassDataUsingTemplate(page: Page, template: Template, cfg: 
 
 export async function runScrape(page: Page, cfg: ScrapeConfig = getDefaultConfig()) {
   // Auto-detect term from the UI if not set via env vars or config
-  if (!cfg.termId) {
+  if (!cfg.termId || !cfg.termLinkText) {
     const detected = await detectTerm(page);
     cfg = { ...cfg, ...detected };
   }

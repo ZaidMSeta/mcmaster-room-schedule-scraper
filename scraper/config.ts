@@ -7,8 +7,9 @@ import path from 'node:path';
 import type { Paths, ScrapeConfig } from './types';
 
 // Returns scrape config. termId/termLinkText are left empty here so
-// run.ts auto-detects them from the live UI. Override via env vars:
-//   TERM_ID=3202610 TERM_LINK_TEXT="2026 Winter" TERM_SEASON=Fall
+// run.ts auto-detects the term currently in session. Override via env vars:
+//   TERM_ID=3202710            (name looked up automatically)
+//   TERM_SEASON=Winter         (next/current term of that season)
 export function getDefaultConfig(): ScrapeConfig {
   return {
     termId: process.env.TERM_ID ?? '',
