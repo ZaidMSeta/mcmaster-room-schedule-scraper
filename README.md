@@ -47,6 +47,9 @@ courses are skipped on rerun. If the session expires mid-run, re-run `auth:setup
 
 ## Data notes
 
+- Each meeting in `rooms.json` carries `startDate`/`endDate`, so half-term sections only block
+  a room on the dates they actually run. The file also includes `termName`, `termStart`, `termEnd`.
+- MyTimetable encodes dates as days since 2007-12-31.
 - `auth.storage.json` holds your session cookies. It is gitignored; never commit it.
 
 ## Safety / rate limiting
