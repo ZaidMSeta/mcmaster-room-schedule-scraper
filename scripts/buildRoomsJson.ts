@@ -170,6 +170,11 @@ function parseSingleLocation(location: string): ParsedLocation | null {
 
   if (!buildingCode || !roomNumber) return null;
 
+  // Placeholders, not bookable rooms: "Mohawk College - MHK_CAMPUS", "McMaster - SEE_NOTES"
+  if (roomNumber.toUpperCase() === "CAMPUS" || codeAndRoom.toUpperCase() === "SEE_NOTES") {
+    return null;
+  }
+
   return {
     buildingName,
     buildingCode,
