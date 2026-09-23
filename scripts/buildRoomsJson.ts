@@ -69,6 +69,8 @@ const parser = new XMLParser({
   attributeNamePrefix: "",
   parseAttributeValue: true,
   trimValues: true,
+  // Names like "Heather O&#39;Reilly" use numeric entities, which 5.7+ no longer decodes by default
+  htmlEntities: true,
 });
 
 function asArray<T>(value: T | T[] | undefined | null): T[] {
