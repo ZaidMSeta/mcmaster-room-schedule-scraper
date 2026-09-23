@@ -1,129 +1,56 @@
+# McMaster Classroom Finder
 
-# McMaster Room Schedule Scraper
-
-A TypeScript + Playwright scraper that exports McMaster timetable schedule data and normalizes it into a structured dataset (building → room → schedule). Built to support a “find an empty room” / room-availability tool and to enable quick searching + analytics over room usage.
+Scrapes McMaster's MyTimetable for every class meeting in the current term, turns that into a
+room → schedule dataset, and serves a static React app that shows which classrooms are free.
 
 > **Note:** This project is intended for personal/educational use.
 
----
+## Layout
 
-## What it does
+- `scraper/` – Playwright scraper (term detection, course listing, class-data fetches)
+- `tests/` – Playwright entrypoints (`auth.setup.spec.ts`, `scrape.spec.ts`)
+- `scripts/buildRoomsJson.ts` – converts scraped XML into `public/rooms.json`
+- `src/` – React + Vite frontend that reads `rooms.json`
 
-- Logs into the timetable system (authenticated Playwright session)
-- Iterates over a course list for a chosen term
-- Downloads raw schedule payloads (e.g., per-course/section data)
-- Parses and normalizes:
-  - course + section identifiers
-  - meeting days/times
-  - location fields (building + room)
-- Writes outputs in a machine-friendly format for downstream use (search, APIs, etc.)
+## Updating for a new term
 
----
-
-## Tech stack
-
-- **Node.js + TypeScript**
-- **Playwright** (test runner + browser automation)
-- XML/HTML parsing utilities (project-specific)
-- A small test suite for key parsing/validation logic
-
-Repository layout:
-- `src/scrape/` – scraper + parsing + IO modules
-- `tests/` – Playwright tests / validation tests
-
----
-
-## Setup
-
-### 1) Install dependencies
 ```bash
 npm install
-npx playwright install
+npx playwright install chromium
+
+# 1. Log in once (opens a browser; sign in, then resume the Playwright inspector).
+#    MyTimetable hides room locations from logged-out requests, so this is required.
+npm run auth:setup
+
+# 2. Scrape. Auto-detects the term in session today and lists every course offered in it.
+npm run scrape
+
+# 3. Build public/rooms.json from out/xml/<termId>/ (newest term folder by default)
+npm run build-rooms
+
+# 4. Build the site
+npm run build
 ```
 
-### 2) Create an authenticated session (storage state)
+The scrape is resumable: progress is logged to `out/results_<termId>.ndjson` and already-processed
+courses are skipped on rerun. If the session expires mid-run, re-run `auth:setup` and `scrape`.
 
-This scraper uses Playwright **storage state** so you don’t log in every run.
+### Overrides
 
-Typical options:
-- Run a dedicated login/auth test that saves `auth.storage.json`
-- Or run Playwright codegen, log in once, then export storage state
+| Env var        | Effect                                                         |
+|----------------|----------------------------------------------------------------|
+| `TERM_ID`      | Scrape a specific term, e.g. `3202710` (2027 Winter)           |
+| `TERM_SEASON`  | Pick the current/next term of a season, e.g. `Winter`          |
+| `COURSES_FILE` | Scrape only the course codes in this file (one per line)       |
 
-Make sure you end up with a file like:
-- `auth.storage.json`
+`npm run build-rooms -- <termId>` builds from a specific term folder.
 
-> Never commit `auth.storage.json` if it contains sensitive cookies/tokens.
+## Data notes
 
----
-
-## Running the scraper
-
-The scraper is implemented as Playwright tests (common for authenticated scraping + retries + timeouts).
-
-Run:
-```bash
-npx playwright test
-```
-
-### Configuration knobs (common)
-
-Inside the scraper test/config you’ll typically set:
-- **TERM_ID** (e.g., Winter 2026)
-- campus / session filters (if applicable)
-- delay / pacing (to be gentle)
-- output directory (e.g., `out/`)
-
----
-
-## Output
-
-This project is designed around a normalized hierarchy:
-
-```text
-buildings
-  └── rooms
-        └── schedules (meetings/time blocks + course metadata)
-```
-
-Typical output folders you may see:
-- `out/xml/<TERM_ID>/...` (raw exports)
-- `out/<normalized format>/...` (cleaned, structured data)
-- run logs / summaries
-
----
+- `auth.storage.json` holds your session cookies. It is gitignored; never commit it.
 
 ## Safety / rate limiting
 
-To reduce load and avoid flaky runs:
-- adds small delays between requests
-- retries around transient failures
-- writes incremental outputs so partial runs still produce usable data
-
----
-
-## Testing
-
-Run tests:
-```bash
-npx playwright test
-```
-
----
-
-## Roadmap ideas
-
-- Incremental updates (diff-based runs so you don’t re-scrape everything)
-- Formal schema + versioned exports
-- Faster search indexing (SQLite/FTS / Postgres / Meilisearch)
-- Room availability API + small frontend
-
----
-
-## Disclaimer
-
-This tool automates browsing and data extraction. Use responsibly:
-- respect access controls
-- avoid scraping private data
-- throttle requests
-- do not share credentials
-
+- 250 ms delay between courses
+- Non-GET calls to MyTimetable's API from the page are blocked (except the course resolver), so the
+  scraper can't modify your saved schedule
