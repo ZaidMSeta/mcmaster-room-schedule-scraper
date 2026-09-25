@@ -9,7 +9,7 @@ room → schedule dataset, and serves a static React app that shows which classr
 
 - `scraper/` – Playwright scraper (term detection, course listing, class-data fetches)
 - `tests/` – Playwright entrypoints (`auth.setup.spec.ts`, `scrape.spec.ts`)
-- `scripts/buildRoomsJson.ts` – converts scraped XML into `public/rooms.json`
+- `scripts/buildRoomsJson.ts` – converts scraped XML into `src/data/rooms.json`
 - `src/` – React + Vite frontend that reads `rooms.json`
 
 ## Updating for a new term
@@ -25,7 +25,7 @@ npm run auth:setup
 # 2. Scrape. Auto-detects the term in session today and lists every course offered in it.
 npm run scrape
 
-# 3. Build public/rooms.json from out/xml/<termId>/ (newest term folder by default)
+# 3. Build src/data/rooms.json from out/xml/<termId>/ (newest term folder by default)
 npm run build-rooms
 
 # 4. Build the site
@@ -47,8 +47,13 @@ courses are skipped on rerun. If the session expires mid-run, re-run `auth:setup
 
 ## Data notes
 
-- Each meeting in `rooms.json` carries `startDate`/`endDate`, so half-term sections only block
-  a room on the dates they actually run. The file also includes `termName`, `termStart`, `termEnd`.
+- `rooms.json` holds only what the app shows: per room, its meetings (day, start/end minutes, label)
+  and an `isLab` flag. Teacher names are left out.
+- A meeting has `startDate`/`endDate` only when it doesn't run the whole term, so half-term
+  sections only block a room on the dates they actually run.
+- The file also includes `termName`, `termStart`, `termEnd`, and `scrapedAt` (when the newest XML
+  was fetched), which the page shows as "updated <date>".
+- The app imports it with `?url`, so the built file name has a content hash and can be cached.
 - MyTimetable encodes dates as days since 2007-12-31.
 - `auth.storage.json` holds your session cookies. It is gitignored; never commit it.
 

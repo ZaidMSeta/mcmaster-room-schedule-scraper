@@ -1,9 +1,11 @@
 import { createBrowserRouter } from "react-router";
-import { MainPage } from "./components/main-page";
+import { Layout } from "./components/Layout";
+import { RoomFinder } from "./pages/RoomFinder";
 
 export const router = createBrowserRouter([
   {
     path: "/",
-    Component: MainPage,
+    Component: Layout,
+    children: [{ index: true, Component: RoomFinder }],
   },
 ]);

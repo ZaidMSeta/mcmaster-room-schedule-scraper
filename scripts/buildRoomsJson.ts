@@ -53,9 +53,47 @@ type RoomOutput = {
   meetings: Meeting[];
 };
 
+// What the app reads (src/app/lib/rooms/types.ts RoomsFile). Only fields the UI uses: no
+// teachers, and course/component/section are already in the label.
+type PublicMeeting = {
+  day: number;   // 1=Sun ... 7=Sat
+  start: number; // minutes since midnight
+  end: number;
+  startDate?: string; // left out when it's the term start
+  endDate?: string;   // left out when it's the term end
+  label: string;
+};
+
+type PublicRoom = {
+  id: string;
+  buildingCode: string;
+  roomNumber: string;
+  // Every class booked here this term is a lab, so it's likely locked outside class times
+  isLab: boolean;
+  meetings: PublicMeeting[];
+};
+
+function toPublicRoom(room: RoomOutput, termStart: string, termEnd: string): PublicRoom {
+  return {
+    id: room.roomId,
+    buildingCode: room.buildingCode,
+    roomNumber: room.roomNumber,
+    isLab: room.meetings.length > 0 && room.meetings.every((m) => m.component === "LAB"),
+    meetings: room.meetings.map((m) => ({
+      day: m.day,
+      start: m.startMin,
+      end: m.endMin,
+      ...(m.startDate !== termStart && { startDate: m.startDate }),
+      ...(m.endDate !== termEnd && { endDate: m.endDate }),
+      label: m.label,
+    })),
+  };
+}
+
 const XML_ROOT = path.resolve(process.cwd(), "out", "xml");
 const termArg = process.argv[2];
-const OUTPUT_FILE = path.resolve(process.cwd(), "public", "rooms.json");
+// Imported by the app with ?url so the built file gets a content hash
+const OUTPUT_FILE = path.resolve(process.cwd(), "src", "data", "rooms.json");
 
 // MyTimetable encodes dates as days since 2007-12-31 (e.g. d1="6819" -> 2026-09-01).
 const MT_EPOCH_MS = Date.UTC(2007, 11, 31);
@@ -594,23 +632,22 @@ function main() {
   const termEnd = allMeetings.reduce((max, m) => (m.endDate > max ? m.endDate : max), allMeetings[0].endDate);
 
   const output = {
-    term: roomsArray[0]?.meetings[0]?.term ?? path.basename(inputDir),
-    termName,
+    termName: termName || path.basename(inputDir),
     termStart,
     termEnd,
-    sourceFolder: path.basename(inputDir),
-    generatedAt: new Date().toISOString(),
+    // When the newest XML was fetched, i.e. how fresh the timetable data is
+    scrapedAt: new Date(Math.max(...xmlFiles.map((f) => fs.statSync(f).mtimeMs))).toISOString(),
     buildings,
-    rooms: roomsArray,
+    rooms: roomsArray.map((room) => toPublicRoom(room, termStart, termEnd)),
   };
 
   fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
-  fs.writeFileSync(OUTPUT_FILE, JSON.stringify(output, null, 2), "utf8");
+  fs.writeFileSync(OUTPUT_FILE, JSON.stringify(output), "utf8");
 
   console.log(`Parsed ${xmlFiles.length} XML files`);
   console.log(`Built ${roomsArray.length} rooms`);
   console.log(`Built ${buildings.length} buildings`);
-  console.log(`Term: ${termName || output.term} (${termStart} to ${termEnd})`);
+  console.log(`Term: ${output.termName} (${termStart} to ${termEnd})`);
   console.log(`Wrote ${OUTPUT_FILE}`);
 
   printBuildSummary(
