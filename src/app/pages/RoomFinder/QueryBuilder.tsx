@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import type { AvailabilityMode, Day, QueryState } from "../../lib/rooms/types";
+import type { AvailabilityMode, Day, QueryState, RawBuilding } from "../../lib/rooms/types";
 import { formatTime, fromMins, LATEST_MINS, roundUpToQuarter, toMins } from "../../lib/rooms/time";
 import { Button } from "../../components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
@@ -15,7 +15,7 @@ import { cn } from "../../components/ui/utils";
 interface QueryBuilderProps {
   value: QueryState;
   onChange: (value: QueryState) => void;
-  buildings: string[];
+  buildings: RawBuilding[];
 }
 
 type OpenPopover = null | "start-time" | "end-time" | "duration";
@@ -29,6 +29,9 @@ const DAYS: { value: Day; label: string }[] = [
   { value: "friday", label: "Friday" },
   { value: "saturday", label: "Saturday" },
 ];
+
+// Radix Select can't use "" as a value
+const ANY_BUILDING = "any";
 
 // Shortest time range you can search
 const MIN_RANGE = 30;
@@ -109,16 +112,20 @@ export function QueryBuilder({ value, onChange, buildings }: QueryBuilderProps) 
     <div className="flex items-center gap-2 flex-wrap">
       <Text>Find me a room in</Text>
 
-      <Select value={value.building} onValueChange={(building) => onChange({ ...value, building })}>
+      <Select
+        value={value.building || ANY_BUILDING}
+        onValueChange={(code) => onChange({ ...value, building: code === ANY_BUILDING ? "" : code })}
+      >
         <SelectTrigger size="sm" className={cn(PILL, "max-w-[16rem]")} aria-label="Building">
           <SelectValue>
-            {value.building === "All Buildings" ? "any building" : value.building}
+            {buildings.find((b) => b.code === value.building)?.name ?? "any building"}
           </SelectValue>
         </SelectTrigger>
         <SelectContent className="max-h-80">
+          <SelectItem value={ANY_BUILDING}>Any building</SelectItem>
           {buildings.map((building) => (
-            <SelectItem key={building} value={building}>
-              {building === "All Buildings" ? "Any building" : building}
+            <SelectItem key={building.code} value={building.code}>
+              {building.name}
             </SelectItem>
           ))}
         </SelectContent>

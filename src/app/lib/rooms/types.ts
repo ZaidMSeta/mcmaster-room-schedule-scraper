@@ -46,7 +46,7 @@ export type AvailabilityMode =
     };
 
 export interface QueryState {
-  building: string;
+  building: string; // building code, "" for any building
   day: Day;
   availability: AvailabilityMode;
 }

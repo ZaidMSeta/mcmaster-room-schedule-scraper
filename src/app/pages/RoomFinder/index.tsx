@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, type ReactNode } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { Search } from "lucide-react";
 import { Card } from "../../components/ui/card";
 import {
@@ -12,9 +13,9 @@ import { cn } from "../../components/ui/utils";
 import type { QueryState, RawRoomsFile, Room, RoomStatus } from "../../lib/rooms/types";
 import { getRoomStatus, isRoomFreeAt, isRoomFreeBetween } from "../../lib/rooms/status";
 import { toMins } from "../../lib/rooms/time";
+import { parseUrlState, toUrlParams, type SortBy, type UrlState } from "../../lib/rooms/url";
 import {
   loadRoomsFile,
-  getBuildingOptions,
   mapRawRoomToRoom,
   dayToDate,
   toIsoDate,
@@ -43,13 +44,19 @@ export function RoomFinder() {
   const currentHour = now.getHours();
   const currentMin = now.getMinutes();
 
-  const [query, setQuery] = useState<QueryState>({
-    building: "All Buildings",
-    day: "today",
-    availability: { type: "right-now" },
-  });
-  const [sortBy, setSortBy] = useState<"building" | "status">("status");
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  // Filters, sort and the open room live in the URL so searches can be shared and linked to
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const urlState = useMemo(() => parseUrlState(searchParams, now), [searchParams, now]);
+  const { sortBy, roomId: selectedRoomId } = urlState;
+  const updateUrl = (next: Partial<UrlState>) => {
+    // Keep times readable (13:30, not 13%3A30); navigate() leaves the search string as given
+    const search = toUrlParams({ ...urlState, ...next }).toString().replaceAll("%3A", ":");
+    navigate({ search: search ? `?${search}` : "" }, { replace: true });
+  };
+  const setQuery = (next: QueryState) => updateUrl({ query: next });
+  const setSortBy = (next: SortBy) => updateUrl({ sortBy: next });
+  const setSelectedRoomId = (next: string | null) => updateUrl({ roomId: next });
   const [rawData, setRawData] = useState<RawRoomsFile | null>(null);
   const [loadError, setLoadError] = useState(false);
 
@@ -62,10 +69,16 @@ export function RoomFinder() {
       });
   }, []);
 
-  const buildings = useMemo(() => {
-    if (!rawData) return ["All Buildings"];
-    return getBuildingOptions(rawData);
-  }, [rawData]);
+  const buildings = rawData?.buildings ?? [];
+
+  // Ignore a building code from the URL that isn't in the data
+  const query = useMemo(
+    () =>
+      rawData && urlState.query.building && !buildings.some((b) => b.code === urlState.query.building)
+        ? { ...urlState.query, building: "" }
+        : urlState.query,
+    [urlState.query, rawData, buildings],
+  );
 
   const selectedDate = dayToDate(query.day, now);
   const selectedIso = toIsoDate(selectedDate);
@@ -133,8 +146,8 @@ export function RoomFinder() {
   const filteredRooms = useMemo(() => {
     let result = [...roomsForSelectedDay];
 
-    if (query.building !== "All Buildings") {
-      result = result.filter((r) => r.building === query.building);
+    if (query.building) {
+      result = result.filter((r) => r.buildingCode === query.building);
     }
 
     result = result.filter(meetsAvailabilityCriteria);
@@ -216,7 +229,7 @@ export function RoomFinder() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Sort:</span>
-                <Select value={sortBy} onValueChange={(v) => setSortBy(v as "building" | "status")}>
+                <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
                   <SelectTrigger size="sm" className="w-[140px]" aria-label="Sort rooms">
                     <SelectValue />
                   </SelectTrigger>

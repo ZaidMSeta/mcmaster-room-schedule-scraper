@@ -71,8 +71,3 @@ export function mapRawRoomToRoom(rawRoom: RawRoom, date: Date): Room {
       .sort((a, b) => slotStart(a) - slotStart(b)),
   };
 }
-
-export function getBuildingOptions(data: RawRoomsFile): string[] {
-  return ["All Buildings", ...data.buildings.map((building) => building.name)];
-}
-
