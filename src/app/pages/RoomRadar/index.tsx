@@ -37,7 +37,7 @@ function formatDateLabel(iso: string): string {
   });
 }
 
-export function RoomFinder() {
+export function RoomRadar() {
   // Re-render every 30s so "right now" statuses don't go stale while the page is open
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {

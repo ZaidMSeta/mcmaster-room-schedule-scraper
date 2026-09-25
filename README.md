@@ -1,4 +1,4 @@
-# McMaster Classroom Finder
+# Room Radar
 
 Scrapes McMaster's MyTimetable for every class meeting in the current term, turns that into a
 room → schedule dataset, and serves a static React app that shows which classrooms are free.
