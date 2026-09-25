@@ -1,8 +1,10 @@
+import roomsUrl from "../../../data/rooms.json?url";
 import type { Day, RawMeeting, RawRoom, RawRoomsFile, Room } from "./types";
-import { slotStart } from "./time";
+import { fromMins, slotStart } from "./time";
 
 export async function loadRoomsFile(): Promise<RawRoomsFile> {
-  const response = await fetch("/rooms.json");
+  // ?url makes the built file name include a content hash, so it can be cached for good
+  const response = await fetch(roomsUrl);
 
   if (!response.ok) {
     throw new Error("Failed to load rooms.json");
@@ -36,38 +38,41 @@ export function toIsoDate(date: Date): string {
   return `${date.getFullYear()}-${m}-${d}`;
 }
 
-// Export uses 1=Sun, 2=Mon, ..., 7=Sat
+// rooms.json uses 1=Sun, 2=Mon, ..., 7=Sat
 function dateToExportDay(date: Date): number {
   return date.getDay() + 1;
 }
 
+// Missing dates mean the meeting runs all term
 function meetingRunsOn(meeting: RawMeeting, isoDate: string): boolean {
   if (meeting.startDate && isoDate < meeting.startDate) return false;
   if (meeting.endDate && isoDate > meeting.endDate) return false;
   return true;
 }
 
-export function mapRawRoomToRoom(rawRoom: RawRoom, date: Date): Room {
+export function mapRawRoomToRoom(rawRoom: RawRoom, buildingName: string, date: Date): Room {
   const dayNumber = dateToExportDay(date);
   const isoDate = toIsoDate(date);
 
   return {
-    id: rawRoom.roomId,
-    building: rawRoom.buildingName,
+    id: rawRoom.id,
+    building: buildingName,
     buildingCode: rawRoom.buildingCode,
     roomNumber: rawRoom.roomNumber,
-    isLab:
-      rawRoom.meetings.length > 0 &&
-      rawRoom.meetings.every((meeting) => meeting.component === "LAB"),
+    isLab: rawRoom.isLab,
     schedule: rawRoom.meetings
       .filter((meeting) => meeting.day === dayNumber && meetingRunsOn(meeting, isoDate))
-      .map((meeting) => ({
-        startHour: meeting.startHour,
-        startMin: meeting.startMinute,
-        endHour: meeting.endHour,
-        endMin: meeting.endMinute,
-        label: meeting.label,
-      }))
+      .map((meeting) => {
+        const start = fromMins(meeting.start);
+        const end = fromMins(meeting.end);
+        return {
+          startHour: start.hour,
+          startMin: start.min,
+          endHour: end.hour,
+          endMin: end.min,
+          label: meeting.label,
+        };
+      })
       .sort((a, b) => slotStart(a) - slotStart(b)),
   };
 }

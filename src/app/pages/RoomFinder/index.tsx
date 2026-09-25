@@ -34,6 +34,11 @@ function formatDateLabel(iso: string): string {
   });
 }
 
+// "Sep 23"
+function formatScrapedAt(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 export function RoomFinder() {
   // Re-render every 30s so "right now" statuses don't go stale while the page is open
   const [now, setNow] = useState(() => new Date());
@@ -85,7 +90,10 @@ export function RoomFinder() {
 
   const roomsForSelectedDay = useMemo(() => {
     if (!rawData) return [];
-    return rawData.rooms.map((room) => mapRawRoomToRoom(room, selectedDate));
+    const names = new Map(rawData.buildings.map((b) => [b.code, b.name]));
+    return rawData.rooms.map((room) =>
+      mapRawRoomToRoom(room, names.get(room.buildingCode) ?? room.buildingCode, selectedDate),
+    );
     // selectedIso captures the date; selectedDate is a new object every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawData, selectedIso]);
@@ -99,8 +107,7 @@ export function RoomFinder() {
     roomsForSelectedDay.length > 0 && roomsForSelectedDay.every((r) => r.schedule.length === 0);
 
   const outOfTerm =
-    !!rawData?.termStart &&
-    !!rawData?.termEnd &&
+    !!rawData &&
     (selectedIso < rawData.termStart || selectedIso > rawData.termEnd);
 
   // Time that statuses are shown for: the searched time, or the current time for "right now"
@@ -188,7 +195,7 @@ export function RoomFinder() {
         </p>
         {rawData && (
           <p className="text-sm text-muted-foreground mt-1">
-            {rawData.termName ? `${rawData.termName} timetable` : "Timetable"} · showing{" "}
+            {rawData.termName} timetable, updated {formatScrapedAt(rawData.scrapedAt)} · showing{" "}
             {formatDateLabel(selectedIso)}
           </p>
         )}
@@ -207,8 +214,8 @@ export function RoomFinder() {
           {outOfTerm && (
             <div className={cn("rounded-xl border px-4 py-3 text-sm", TONE_STYLES.soon.soft, TONE_STYLES.soon.text)}>
               Classes aren't in session on {formatDateLabel(selectedIso)} (
-              {rawData.termName ?? "this term"} runs {formatDateLabel(rawData.termStart!)} to{" "}
-              {formatDateLabel(rawData.termEnd!)}), so every room shows as free.
+              {rawData.termName} runs {formatDateLabel(rawData.termStart)} to{" "}
+              {formatDateLabel(rawData.termEnd)}), so every room shows as free.
             </div>
           )}
           {!outOfTerm && noClassesThatDay && (

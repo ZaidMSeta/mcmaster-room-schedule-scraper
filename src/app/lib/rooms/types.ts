@@ -51,29 +51,21 @@ export interface QueryState {
   availability: AvailabilityMode;
 }
 
+// rooms.json, written by scripts/buildRoomsJson.ts
 export interface RawMeeting {
-  term: string;
-  course: string;
-  component: string;
-  section: string;
-  day: number;
-  startMin: number;
-  endMin: number;
-  startHour: number;
-  startMinute: number;
-  endHour: number;
-  endMinute: number;
-  startDate?: string; // YYYY-MM-DD
-  endDate?: string;   // YYYY-MM-DD
+  day: number;   // 1=Sun ... 7=Sat
+  start: number; // minutes since midnight
+  end: number;
+  startDate?: string; // YYYY-MM-DD; missing means the term start
+  endDate?: string;   // YYYY-MM-DD; missing means the term end
   label: string;
-  teachers: string[];
 }
 
 export interface RawRoom {
-  roomId: string;
+  id: string;
   buildingCode: string;
-  buildingName: string;
   roomNumber: string;
+  isLab: boolean;
   meetings: RawMeeting[];
 }
 
@@ -83,12 +75,10 @@ export interface RawBuilding {
 }
 
 export interface RawRoomsFile {
-  term: string;
-  termName?: string;
-  termStart?: string; // YYYY-MM-DD
-  termEnd?: string;   // YYYY-MM-DD
-  sourceFolder: string;
-  generatedAt: string;
+  termName: string;
+  termStart: string; // YYYY-MM-DD
+  termEnd: string;   // YYYY-MM-DD
+  scrapedAt: string; // ISO timestamp
   buildings: RawBuilding[];
   rooms: RawRoom[];
 }
