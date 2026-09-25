@@ -105,7 +105,9 @@ function mtDayToIso(day: number): string {
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "",
-  parseAttributeValue: true,
+  // Keep attributes as strings: numbers are converted explicitly, and course numbers like
+  // "1E03" would otherwise be read as scientific notation (1000)
+  parseAttributeValue: false,
   trimValues: true,
   // Names like "Heather O&#39;Reilly" use numeric entities, which 5.7+ no longer decodes by default
   htmlEntities: true,
@@ -203,7 +205,13 @@ function parseSingleLocation(location: string): ParsedLocation | null {
   const codeAndRoom = parts.slice(1).join(" - ").trim();
 
   const underscoreIndex = codeAndRoom.indexOf("_");
-  if (underscoreIndex === -1) return null;
+  if (underscoreIndex === -1) {
+    // A whole facility booked with no room number, e.g. "Adv Dynamics Lab - ADL"
+    if (/^[A-Z0-9]+$/.test(codeAndRoom)) {
+      return { buildingName, buildingCode: codeAndRoom, roomNumber: "" };
+    }
+    return null;
+  }
 
   const buildingCode = codeAndRoom.slice(0, underscoreIndex).trim();
   const roomNumber = codeAndRoom.slice(underscoreIndex + 1).trim();
@@ -220,6 +228,17 @@ function parseSingleLocation(location: string): ParsedLocation | null {
     buildingCode,
     roomNumber,
   };
+}
+
+// Why a meeting couldn't be placed in a room, for the build summary
+function skipReason(location: string): string {
+  const upper = location.trim().toUpperCase();
+  if (!upper) return "no location";
+  if (upper.includes("ONLINE") || upper.includes("VIRTUAL")) return "online";
+  if (upper.includes("TBA")) return "TBA";
+  if (upper.endsWith("SEE_NOTES")) return "see notes";
+  if (upper.endsWith("_CAMPUS")) return "off campus";
+  return "unrecognized";
 }
 
 function parseMultipleLocations(location: string): ParsedLocation[] {
@@ -448,6 +467,8 @@ function main() {
 
   const roomMap = new Map<string, RoomRecord>();
   const meetingDedup = new Set<string>();
+  const skipped = new Map<string, Set<string>>(); // reason -> course/section/timeblock keys
+  const unrecognized = new Set<string>();
   let termName = "";
 
   for (const filePath of xmlFiles) {
@@ -469,8 +490,10 @@ function main() {
       const uselections = asArray<AttrNode>(courseNode.uselection);
 
       for (const uselection of uselections) {
-        const selection = uselection.selection as AttrNode | undefined;
-        if (!selection) continue;
+        // A uselection holds several <selection>s when section combinations share the same
+        // times (e.g. one lecture with any of several tutorials); each has its own blocks
+        const selections = asArray<AttrNode>(uselection.selection);
+        if (selections.length === 0) continue;
 
         const timeblocks = asArray<AttrNode>(
           uselection.timeblock as AttrNode | AttrNode[] | undefined
@@ -493,8 +516,8 @@ function main() {
           timeblockMap.set(id, { id, day, t1, t2, startDate: mtDayToIso(d1), endDate: mtDayToIso(d2) });
         }
 
-        const blocks = asArray<AttrNode>(
-          selection.block as AttrNode | AttrNode[] | undefined
+        const blocks = selections.flatMap((selection) =>
+          asArray<AttrNode>(selection.block as AttrNode | AttrNode[] | undefined)
         );
 
         for (const block of blocks) {
@@ -524,7 +547,14 @@ function main() {
               parsedLocations = fallbackLocations;
             }
 
-            if (parsedLocations.length === 0) continue;
+            if (parsedLocations.length === 0) {
+              const raw = loosMap[timeblockId] ?? blockLocation;
+              const reason = skipReason(raw);
+              if (reason === "unrecognized") unrecognized.add(raw);
+              if (!skipped.has(reason)) skipped.set(reason, new Set());
+              skipped.get(reason)!.add([courseLabel, component, section, tb.day, tb.t1, tb.t2].join("|"));
+              continue;
+            }
 
             const { hour: startHour, minute: startMinute } = toHourMinute(tb.t1);
             const { hour: endHour, minute: endMinute } = toHourMinute(tb.t2);
@@ -548,7 +578,7 @@ function main() {
               if (meetingDedup.has(dedupeKey)) continue;
               meetingDedup.add(dedupeKey);
 
-              const roomId = `${parsedLocation.buildingCode} ${parsedLocation.roomNumber}`;
+              const roomId = `${parsedLocation.buildingCode} ${parsedLocation.roomNumber}`.trim();
 
               if (!roomMap.has(roomId)) {
                 roomMap.set(roomId, {
@@ -648,6 +678,15 @@ function main() {
   console.log(`Built ${roomsArray.length} rooms`);
   console.log(`Built ${buildings.length} buildings`);
   console.log(`Term: ${output.termName} (${termStart} to ${termEnd})`);
+  console.log(`Weekly meetings placed in rooms: ${meetingDedup.size}`);
+  console.log(
+    `Weekly meetings with no room to place: ` +
+      [...skipped].map(([reason, keys]) => `${reason} ${keys.size}`).join(", ")
+  );
+  if (unrecognized.size > 0) {
+    console.warn(`WARNING: unrecognized location formats (add them to parseSingleLocation):`);
+    for (const loc of unrecognized) console.warn(`  "${loc}"`);
+  }
   console.log(`Wrote ${OUTPUT_FILE}`);
 
   printBuildSummary(
