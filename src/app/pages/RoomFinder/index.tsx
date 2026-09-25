@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Search } from "lucide-react";
+import { Checkbox } from "../../components/ui/checkbox";
+import { Label } from "../../components/ui/label";
 import { Card } from "../../components/ui/card";
 import {
   Select,
@@ -13,7 +15,8 @@ import { cn } from "../../components/ui/utils";
 import type { QueryState, RawRoomsFile, Room, RoomStatus } from "../../lib/rooms/types";
 import { getRoomStatus, isRoomFreeAt, isRoomFreeBetween } from "../../lib/rooms/status";
 import { toMins } from "../../lib/rooms/time";
-import { parseUrlState, toUrlParams, type SortBy, type UrlState } from "../../lib/rooms/url";
+import { parseUrlState, toUrlParams, type RoomFilters, type SortBy, type UrlState } from "../../lib/rooms/url";
+import { mayBeLocked } from "../../lib/rooms/access";
 import {
   loadRoomsFile,
   mapRawRoomToRoom,
@@ -53,7 +56,7 @@ export function RoomFinder() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const urlState = useMemo(() => parseUrlState(searchParams, now), [searchParams, now]);
-  const { sortBy, roomId: selectedRoomId } = urlState;
+  const { sortBy, filters, roomId: selectedRoomId } = urlState;
   const updateUrl = (next: Partial<UrlState>) => {
     // Keep times readable (13:30, not 13%3A30); navigate() leaves the search string as given
     const search = toUrlParams({ ...urlState, ...next }).toString().replaceAll("%3A", ":");
@@ -61,6 +64,8 @@ export function RoomFinder() {
   };
   const setQuery = (next: QueryState) => updateUrl({ query: next });
   const setSortBy = (next: SortBy) => updateUrl({ sortBy: next });
+  const toggleFilter = (key: keyof RoomFilters) =>
+    updateUrl({ filters: { ...filters, [key]: !filters[key] } });
   const setSelectedRoomId = (next: string | null) => updateUrl({ roomId: next });
   const [rawData, setRawData] = useState<RawRoomsFile | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -156,6 +161,8 @@ export function RoomFinder() {
     if (query.building) {
       result = result.filter((r) => r.buildingCode === query.building);
     }
+    if (filters.power) result = result.filter((r) => r.info?.power);
+    if (filters.hideLocked) result = result.filter((r) => !mayBeLocked(r));
 
     result = result.filter(meetsAvailabilityCriteria);
 
@@ -179,7 +186,7 @@ export function RoomFinder() {
     }
 
     return result;
-  }, [query, sortBy, roomsForSelectedDay, refTime]);
+  }, [query, sortBy, filters, roomsForSelectedDay, refTime]);
 
   const freeCount = filteredRooms.filter((room) => {
     const { status } = getRoomStatus(room, refTime.hour, refTime.min);
@@ -203,6 +210,22 @@ export function RoomFinder() {
 
       <Card className="p-5 gap-0">
         <QueryBuilder value={query} onChange={setQuery} buildings={buildings} now={now} />
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-8 mt-4 pt-4 border-t">
+          <FilterCheckbox
+            id="filter-power"
+            checked={filters.power}
+            onChange={() => toggleFilter("power")}
+            label="Only rooms with outlets at seats"
+            hint="Per the McMaster classroom directory"
+          />
+          <FilterCheckbox
+            id="filter-locked"
+            checked={filters.hideLocked}
+            onChange={() => toggleFilter("hideLocked")}
+            label="Hide rooms that may be locked"
+            hint="Departmental rooms and testing centres"
+          />
+        </div>
       </Card>
 
       {loadError ? (
@@ -310,6 +333,30 @@ function compareRooms(a: Room, b: Room): number {
   return (
     a.building.localeCompare(b.building) ||
     a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true })
+  );
+}
+
+function FilterCheckbox({
+  id,
+  checked,
+  onChange,
+  label,
+  hint,
+}: {
+  id: string;
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  hint: string;
+}) {
+  return (
+    <div className="flex items-start gap-2">
+      <Checkbox id={id} checked={checked} onCheckedChange={onChange} className="mt-0.5" />
+      <Label htmlFor={id} className="flex-col items-start gap-0 text-sm font-normal leading-snug cursor-pointer">
+        <span className="text-foreground">{label}</span>
+        <span className="text-xs text-muted-foreground">{hint}</span>
+      </Label>
+    </div>
   );
 }
 

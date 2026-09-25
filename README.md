@@ -9,7 +9,9 @@ room → schedule dataset, and serves a static React app that shows which classr
 
 - `scraper/` – Playwright scraper (term detection, course listing, class-data fetches)
 - `tests/` – Playwright entrypoints (`auth.setup.spec.ts`, `scrape.spec.ts`)
-- `scripts/buildRoomsJson.ts` – converts scraped XML into `src/data/rooms.json`
+- `scripts/scrapeClassroomDirectory.ts` – downloads https://library.mcmaster.ca/classroom-directory
+  (16 pages, 2 s apart) into `out/classroom-directory.json`
+- `scripts/buildRoomsJson.ts` – converts scraped XML plus the directory into `src/data/rooms.json`
 - `src/` – React + Vite frontend that reads `rooms.json`
 
 ## Updating for a new term
@@ -25,10 +27,13 @@ npm run auth:setup
 # 2. Scrape. Auto-detects the term in session today and lists every course offered in it.
 npm run scrape
 
-# 3. Build src/data/rooms.json from out/xml/<termId>/ (newest term folder by default)
+# 3. Fetch the Libraries' classroom directory (room type, capacity, seating, AV, photos)
+npm run scrape:directory
+
+# 4. Build src/data/rooms.json from out/xml/<termId>/ and out/classroom-directory.json (newest term folder by default)
 npm run build-rooms
 
-# 4. Build the site
+# 5. Build the site
 npm run build
 ```
 
@@ -48,7 +53,13 @@ courses are skipped on rerun. If the session expires mid-run, re-run `auth:setup
 ## Data notes
 
 - `rooms.json` holds only what the app shows: per room, its meetings (day, start/end minutes, label)
-  and an `isLab` flag. Teacher names are left out.
+  and, for rooms in the classroom directory, an `info` object (type, capacity, access, power at seats,
+  seating, boards, laptop-to-screen options, accessibility, photo URL, directory link). Teacher names
+  are left out.
+- Rooms the directory marks Departmental or Testing Centre are tagged "may be locked". Directory rooms
+  with no classes this term are included with an empty schedule.
+- `build-rooms` prints how many weekly meetings it placed and why the rest couldn't be (online, TBA,
+  see notes, off campus, no location), and warns on any location format it doesn't recognize.
 - A meeting has `startDate`/`endDate` only when it doesn't run the whole term, so half-term
   sections only block a room on the dates they actually run.
 - The file also includes `termName`, `termStart`, `termEnd`, and `scrapedAt` (when the newest XML

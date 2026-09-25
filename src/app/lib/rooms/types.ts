@@ -11,9 +11,26 @@ export interface Room {
   building: string;
   buildingCode: string;
   roomNumber: string;
-  // Every class booked here this term is a lab, so it's likely locked outside class times
-  isLab: boolean;
+  info?: RoomInfo; // from the Libraries' classroom directory; missing for rooms not listed there
+  hasClassesThisTerm: boolean;
   schedule: TimeSlot[];
+}
+
+// Who can use a room, per the classroom directory
+export type RoomAccess = "general" | "departmental" | "computer-lab" | "testing-centre";
+
+// What the classroom directory says about a room (written by scripts/buildRoomsJson.ts)
+export interface RoomInfo {
+  type?: string; // "Classroom", "Lecture Theatre", "Departmental Room", ...
+  capacity?: number;
+  access: RoomAccess;
+  power: boolean; // power outlets at seats
+  seating: string[];
+  boards: string[];
+  screenShare: string[]; // ways to connect a laptop to the room's display: "HDMI", "USB-C", ...
+  accessibility: string[];
+  photo?: string;
+  url?: string; // the room's page in the directory
 }
 
 export type RoomStatus = "free" | "occupied" | "soon-occupied" | "soon-free";
@@ -65,7 +82,7 @@ export interface RawRoom {
   id: string;
   buildingCode: string;
   roomNumber: string;
-  isLab: boolean;
+  info?: RoomInfo;
   meetings: RawMeeting[];
 }
 

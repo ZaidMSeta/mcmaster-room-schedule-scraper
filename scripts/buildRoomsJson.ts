@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { XMLParser } from "fast-xml-parser";
+import type { DirectoryRoom } from "./scrapeClassroomDirectory";
 
 type AttrNode = Record<string, any>;
 
@@ -64,21 +65,43 @@ type PublicMeeting = {
   label: string;
 };
 
+// Who can use the room, from the classroom directory
+type RoomAccess = "general" | "departmental" | "computer-lab" | "testing-centre";
+
+// What the classroom directory says about a room, trimmed to what helps someone studying
+// or meeting there
+type RoomInfo = {
+  type?: string;
+  capacity?: number;
+  access: RoomAccess;
+  power: boolean; // power outlets at seats
+  seating: string[];
+  boards: string[];
+  screenShare: string[]; // ways to connect a laptop to the room's display
+  accessibility: string[];
+  photo?: string;
+  url?: string;
+};
+
 type PublicRoom = {
   id: string;
   buildingCode: string;
   roomNumber: string;
-  // Every class booked here this term is a lab, so it's likely locked outside class times
-  isLab: boolean;
+  info?: RoomInfo; // missing when the room isn't in the classroom directory
   meetings: PublicMeeting[];
 };
 
-function toPublicRoom(room: RoomOutput, termStart: string, termEnd: string): PublicRoom {
+function toPublicRoom(
+  room: RoomOutput,
+  termStart: string,
+  termEnd: string,
+  info: RoomInfo | undefined,
+): PublicRoom {
   return {
     id: room.roomId,
     buildingCode: room.buildingCode,
     roomNumber: room.roomNumber,
-    isLab: room.meetings.length > 0 && room.meetings.every((m) => m.component === "LAB"),
+    ...(info && { info }),
     meetings: room.meetings.map((m) => ({
       day: m.day,
       start: m.startMin,
@@ -91,6 +114,66 @@ function toPublicRoom(room: RoomOutput, termStart: string, termEnd: string): Pub
 }
 
 const XML_ROOT = path.resolve(process.cwd(), "out", "xml");
+// Written by npm run scrape:directory
+const DIRECTORY_FILE = path.resolve(process.cwd(), "out", "classroom-directory.json");
+
+// The directory names some Health Science Centre rooms "HHS-MUMC 2J13"; the timetable says "HSC_2J13"
+const DIRECTORY_BUILDING_ALIASES: Record<string, string> = { "HHS-MUMC": "HSC" };
+
+// Buildings that only have directory rooms (no classes this term), so the timetable doesn't name them
+const DIRECTORY_ONLY_BUILDING_NAMES: Record<string, string> = {
+  GH: "Gilmour Hall",
+  LS: "Life Sciences Building",
+  PC: "Psychology Building",
+  TSH: "Togo Salmon Hall",
+  UH: "University Hall",
+};
+
+function loadDirectory(): DirectoryRoom[] {
+  if (!fs.existsSync(DIRECTORY_FILE)) {
+    console.warn(`WARNING: ${DIRECTORY_FILE} not found; run npm run scrape:directory. Building without room details.`);
+    return [];
+  }
+  return JSON.parse(fs.readFileSync(DIRECTORY_FILE, "utf8")).rooms;
+}
+
+// "ETB 235/236" is one combinable room in the directory but two in the timetable
+function directoryRoomIds(name: string): { buildingCode: string; roomNumber: string; ids: string[] } {
+  const [rawCode, ...rest] = name.trim().split(/\s+/);
+  const buildingCode = DIRECTORY_BUILDING_ALIASES[rawCode] ?? rawCode;
+  const roomNumber = rest.join(" ");
+  return { buildingCode, roomNumber, ids: roomNumber.split("/").map((part) => `${buildingCode} ${part}`) };
+}
+
+function toRoomInfo(d: DirectoryRoom): RoomInfo {
+  const access: RoomAccess =
+    d.controlledBy === "UTS Computer Lab"
+      ? "computer-lab"
+      : d.type === "Testing Centre"
+        ? "testing-centre"
+        : d.controlledBy === "Departmental" || d.type?.startsWith("Departmental")
+          ? "departmental"
+          : "general";
+
+  const hasDisplay = d.presentation.some((p) => /projector|television|display/i.test(p));
+  const screenShare = hasDisplay
+    ? [...new Set(d.presentation.map((p) => p.match(/^Bring Your Own Device - (\S+)/)?.[1]).filter(Boolean) as string[])]
+    : [];
+
+  return {
+    ...(d.type && { type: d.type }),
+    ...(d.capacity && { capacity: d.capacity }),
+    access,
+    power: d.seating.includes("Power at Seats"),
+    seating: d.seating.filter((s) => s !== "Power at Seats"),
+    boards: d.annotation.filter((a) => /board/i.test(a)).map((a) => a.replace("BlackBoard", "Blackboard")),
+    screenShare,
+    accessibility: d.accessibility,
+    // Rooms without a photo point at a relative "unavailable.jpg" placeholder
+    ...(d.photo?.startsWith("https://") && !d.photo.includes("unavailable") && { photo: d.photo }),
+    ...(d.url && { url: d.url }),
+  };
+}
 const termArg = process.argv[2];
 // Imported by the app with ?url so the built file gets a content hash
 const OUTPUT_FILE = path.resolve(process.cwd(), "src", "data", "rooms.json");
@@ -661,14 +744,37 @@ function main() {
   const termStart = allMeetings.reduce((min, m) => (m.startDate < min ? m.startDate : min), allMeetings[0].startDate);
   const termEnd = allMeetings.reduce((max, m) => (m.endDate > max ? m.endDate : max), allMeetings[0].endDate);
 
+  // Classroom directory: attach details to timetable rooms, and add directory rooms that have
+  // no classes this term
+  const directory = loadDirectory();
+  const infoById = new Map<string, RoomInfo>();
+  const directoryOnlyRooms: RoomOutput[] = [];
+  for (const d of directory) {
+    const { buildingCode, roomNumber, ids } = directoryRoomIds(d.name);
+    const info = toRoomInfo(d);
+    for (const id of ids) infoById.set(id, info);
+    if (!ids.some((id) => roomMap.has(id))) {
+      const id = `${buildingCode} ${roomNumber}`;
+      infoById.set(id, info);
+      directoryOnlyRooms.push({ roomId: id, buildingCode, buildingName: "", roomNumber, meetings: [] });
+      if (!buildingMap.has(buildingCode)) {
+        const name = DIRECTORY_ONLY_BUILDING_NAMES[buildingCode];
+        if (!name) console.warn(`WARNING: no name for directory building ${buildingCode}; add it to DIRECTORY_ONLY_BUILDING_NAMES`);
+        buildingMap.set(buildingCode, { code: buildingCode, name: name ?? buildingCode });
+      }
+    }
+  }
+  const allRooms = [...roomsArray, ...directoryOnlyRooms].sort((a, b) => a.roomId.localeCompare(b.roomId));
+  const allBuildings = Array.from(buildingMap.values()).sort((a, b) => a.code.localeCompare(b.code));
+
   const output = {
     termName: termName || path.basename(inputDir),
     termStart,
     termEnd,
     // When the newest XML was fetched, i.e. how fresh the timetable data is
     scrapedAt: new Date(Math.max(...xmlFiles.map((f) => fs.statSync(f).mtimeMs))).toISOString(),
-    buildings,
-    rooms: roomsArray.map((room) => toPublicRoom(room, termStart, termEnd)),
+    buildings: allBuildings,
+    rooms: allRooms.map((room) => toPublicRoom(room, termStart, termEnd, infoById.get(room.roomId))),
   };
 
   fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
@@ -676,6 +782,13 @@ function main() {
 
   console.log(`Parsed ${xmlFiles.length} XML files`);
   console.log(`Built ${roomsArray.length} rooms`);
+  if (directory.length > 0) {
+    const matched = roomsArray.filter((r) => infoById.has(r.roomId)).length;
+    console.log(
+      `Classroom directory: ${directory.length} rooms; details for ${matched} of ${roomsArray.length} timetable rooms; ` +
+        `${directoryOnlyRooms.length} rooms added with no classes this term`,
+    );
+  }
   console.log(`Built ${buildings.length} buildings`);
   console.log(`Term: ${output.termName} (${termStart} to ${termEnd})`);
   console.log(`Weekly meetings placed in rooms: ${meetingDedup.size}`);

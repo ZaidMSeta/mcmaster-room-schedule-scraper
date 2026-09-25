@@ -11,14 +11,17 @@
     "build": "vite build",
     "build:full": "npm run build-rooms && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json"
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "scrape:directory": "TS_NODE_PROJECT=tsconfig.node.json node --loader ts-node/esm scripts/scrapeClassroomDirectory.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "Scrapes McMaster's MyTimetable and shows which classrooms are free",
   "dependencies": {
+    "@radix-ui/react-checkbox": "1.1.4",
     "@radix-ui/react-dialog": "1.1.6",
+    "@radix-ui/react-label": "2.1.2",
     "@radix-ui/react-popover": "1.1.6",
     "@radix-ui/react-select": "2.1.6",
     "@radix-ui/react-slot": "1.1.2",

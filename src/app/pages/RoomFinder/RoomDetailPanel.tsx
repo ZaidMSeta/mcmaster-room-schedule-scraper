@@ -1,6 +1,6 @@
-import { useRef } from "react";
-import { Building2, Clock } from "lucide-react";
-import type { Room, RoomStatus } from "../../lib/rooms/types";
+import { Fragment, useRef } from "react";
+import { Building2, Clock, ExternalLink } from "lucide-react";
+import type { Room, RoomInfo, RoomStatus } from "../../lib/rooms/types";
 import { getRoomStatus } from "../../lib/rooms/status";
 import { DAY_END_HOUR, DAY_START_HOUR, formatDuration, formatTime, slotEnd, slotStart, toMins } from "../../lib/rooms/time";
 import {
@@ -13,7 +13,7 @@ import {
 import { cn } from "../../components/ui/utils";
 import { STATUS_STYLES, TONE_STYLES } from "./statusStyles";
 import { TimelineStrip } from "./TimelineStrip";
-import { LabTag } from "./RoomCard";
+import { AccessTag, PowerBadge, roomSummary } from "./RoomCard";
 import { Badge } from "../../components/ui/badge";
 
 interface RoomDetailPanelProps {
@@ -207,12 +207,13 @@ function RoomDetails({
           {room.buildingCode} {room.roomNumber}
         </SheetTitle>
         <SheetDescription className="flex items-center gap-1.5">
-          <Building2 className="size-3.5" />
-          {room.building}
+          <Building2 className="size-3.5 shrink-0" />
+          {[room.building, roomSummary(room)].filter(Boolean).join(" · ")}
         </SheetDescription>
-        {room.isLab && (
-          <div className="mt-1">
-            <LabTag />
+        {(room.info?.power || (room.info && room.info.access !== "general")) && (
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            <AccessTag room={room} />
+            {room.info?.power && <PowerBadge />}
           </div>
         )}
 
@@ -226,7 +227,26 @@ function RoomDetails({
       </SheetHeader>
 
       <div className="flex-1 overflow-y-auto">
+        {room.info?.photo && (
+          <img
+            src={room.info.photo}
+            alt={`${room.buildingCode} ${room.roomNumber}`}
+            loading="lazy"
+            // The photo is on the Libraries' site; hide it rather than show a broken image
+            onError={(e) => {
+              e.currentTarget.hidden = true;
+            }}
+            className="w-full aspect-[5/3] object-cover bg-muted"
+          />
+        )}
+
         <div className="px-6 pt-5 pb-4">
+          {!room.hasClassesThisTerm && (
+            <p className="text-sm text-muted-foreground mb-2">
+              No classes are scheduled here this term.
+              {room.info?.access !== "general" && " It may still be booked by its department."}
+            </p>
+          )}
           <p className="text-sm text-foreground leading-relaxed">{summary}</p>
           <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
@@ -244,6 +264,8 @@ function RoomDetails({
         <div className="px-6 pb-2">
           <TimelineStrip schedule={room.schedule} refMins={nowMins} nowMins={realNowMins} />
         </div>
+
+        {room.info && <RoomFacts info={room.info} />}
 
         <div className="mx-6 my-4 border-t" />
 
@@ -276,6 +298,47 @@ function RoomDetails({
             </li>
           </ol>
         </div>
+      </div>
+    </>
+  );
+}
+
+// Details from the Libraries' classroom directory that matter for studying or meeting in a room
+function RoomFacts({ info }: { info: RoomInfo }) {
+  const facts: [string, string][] = [
+    ["Seating", info.seating.join(", ")],
+    ["Power at seats", info.power ? "Yes" : ""],
+    ["Boards", info.boards.join(", ")],
+    ["Laptop to screen", info.screenShare.join(", ")],
+    ["Accessibility", info.accessibility.join(", ")],
+  ].filter((f): f is [string, string] => Boolean(f[1]));
+
+  return (
+    <>
+      <div className="mx-6 my-4 border-t" />
+      <div className="px-6">
+        <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-3">About this room</h3>
+        {facts.length > 0 && (
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+            {facts.map(([label, value]) => (
+              <Fragment key={label}>
+                <dt className="text-muted-foreground">{label}</dt>
+                <dd className="text-foreground">{value}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        )}
+        {info.url && (
+          <a
+            href={info.url}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex items-center gap-1 text-sm text-primary hover:underline underline-offset-2"
+          >
+            Full details in the McMaster classroom directory
+            <ExternalLink className="size-3.5" />
+          </a>
+        )}
       </div>
     </>
   );

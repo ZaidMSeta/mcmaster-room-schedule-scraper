@@ -2,14 +2,20 @@ import type { AvailabilityMode, Day, QueryState } from "./types";
 import { fromMins, LATEST_MINS, roundUpToQuarter, toMins } from "./time";
 
 // URL params for the room finder, e.g.
-//   ?building=JHE&day=wed&from=13:30&to=15:00&room=JHE+264
+//   ?building=JHE&day=wed&from=13:30&to=15:00&power=1&hideLocked=1&room=JHE+264
 // Defaults (any building, today, right now, sort by availability) are left out.
 
 export type SortBy = "status" | "building";
 
+export interface RoomFilters {
+  power: boolean; // only rooms with outlets at seats
+  hideLocked: boolean; // hide departmental rooms and testing centres
+}
+
 export interface UrlState {
   query: QueryState;
   sortBy: SortBy;
+  filters: RoomFilters;
   roomId: string | null;
 }
 
@@ -80,11 +86,12 @@ export function parseUrlState(params: URLSearchParams, now: Date): UrlState {
       availability: parseAvailability(params, day, now),
     },
     sortBy: params.get("sort") === "building" ? "building" : "status",
+    filters: { power: params.get("power") === "1", hideLocked: params.get("hideLocked") === "1" },
     roomId: params.get("room"),
   };
 }
 
-export function toUrlParams({ query, sortBy, roomId }: UrlState): URLSearchParams {
+export function toUrlParams({ query, sortBy, filters, roomId }: UrlState): URLSearchParams {
   const params = new URLSearchParams();
   if (query.building) params.set("building", query.building);
   if (query.day !== "today") params.set("day", DAY_PARAMS[query.day]);
@@ -100,6 +107,8 @@ export function toUrlParams({ query, sortBy, roomId }: UrlState): URLSearchParam
     params.set("for", String(toMins(avail.hours, avail.minutes)));
   }
 
+  if (filters.power) params.set("power", "1");
+  if (filters.hideLocked) params.set("hideLocked", "1");
   if (sortBy !== "status") params.set("sort", sortBy);
   if (roomId) params.set("room", roomId);
   return params;
