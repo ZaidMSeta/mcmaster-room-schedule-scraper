@@ -1,9 +1,9 @@
 import { createBrowserRouter } from "react-router";
-import { MainPage } from "./components/main-page";
+import { RoomFinder } from "./pages/RoomFinder";
 
 export const router = createBrowserRouter([
   {
     path: "/",
-    Component: MainPage,
+    Component: RoomFinder,
   },
 ]);

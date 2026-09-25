@@ -1,8 +1,11 @@
 import { useEffect } from "react";
 import { X, Building2, Clock } from "lucide-react";
-import { Room, getRoomStatus, RoomStatus, formatTime } from "../data/rooms";
-import { TimelineStrip } from "./timeline-strip";
-import { LabTag } from "./room-card";
+import type { Room, RoomStatus } from "../../lib/rooms/types";
+import { getRoomStatus } from "../../lib/rooms/status";
+import { DAY_END_HOUR, DAY_START_HOUR, formatDuration, formatTime, slotEnd, slotStart, toMins } from "../../lib/rooms/time";
+import { STATUS_STYLES } from "./statusStyles";
+import { TimelineStrip } from "./TimelineStrip";
+import { LabTag } from "./RoomCard";
 
 interface RoomDetailPanelProps {
   room: Room;
@@ -13,41 +16,14 @@ interface RoomDetailPanelProps {
   onClose: () => void;
 }
 
-const DAY_START = 8;
-const DAY_END = 22;
+const DAY_START = DAY_START_HOUR;
+const DAY_END = DAY_END_HOUR;
 
-const statusStyles: Record<
-  RoomStatus,
-  { bg: string; text: string; dot: string; border: string; label: string }
-> = {
-  free: {
-    bg: "bg-[#e8f5e9]",
-    text: "text-[#2e7d32]",
-    dot: "bg-[#4caf50]",
-    border: "border-[#c8e6c9]",
-    label: "Available now",
-  },
-  occupied: {
-    bg: "bg-[#ffebee]",
-    text: "text-[#c62828]",
-    dot: "bg-[#ef5350]",
-    border: "border-[#ffcdd2]",
-    label: "Occupied",
-  },
-  "soon-free": {
-    bg: "bg-[#fff8e1]",
-    text: "text-[#f57f17]",
-    dot: "bg-[#ffb300]",
-    border: "border-[#ffecb3]",
-    label: "Freeing up soon",
-  },
-  "soon-occupied": {
-    bg: "bg-[#fff8e1]",
-    text: "text-[#f57f17]",
-    dot: "bg-[#ffb300]",
-    border: "border-[#ffecb3]",
-    label: "Available briefly",
-  },
+const STATUS_TITLES: Record<RoomStatus, string> = {
+  free: "Available now",
+  occupied: "Occupied",
+  "soon-free": "Freeing up soon",
+  "soon-occupied": "Available briefly",
 };
 
 function getSummaryLine(
@@ -58,26 +34,21 @@ function getSummaryLine(
   currentMin: number,
   dayLabel: string,
 ): string {
-  const nowMins = currentHour * 60 + currentMin;
+  const nowMins = toMins(currentHour, currentMin);
 
   if (room.schedule.length === 0) {
     return `No classes scheduled ${dayLabel}. Available all day.`;
   }
 
   if (status === "free") {
-    const upcoming = room.schedule
-      .filter((s) => s.startHour * 60 + s.startMin > nowMins)
-      .sort(
-        (a, b) =>
-          a.startHour * 60 + a.startMin - (b.startHour * 60 + b.startMin),
-      );
+    // schedule is sorted by start time
+    const next = room.schedule.find((s) => slotStart(s) > nowMins);
 
-    if (upcoming.length === 0) {
+    if (!next) {
       return `No more classes ${dayLabel}. Free for the rest of the day.`;
     }
 
-    const next = upcoming[0];
-    const minsUntil = next.startHour * 60 + next.startMin - nowMins;
+    const minsUntil = slotStart(next) - nowMins;
 
     if (minsUntil >= 60) {
       const hrs = Math.floor(minsUntil / 60);
@@ -89,35 +60,20 @@ function getSummaryLine(
   }
 
   if (status === "occupied" || status === "soon-free") {
-    const current = room.schedule.find((s) => {
-      const start = s.startHour * 60 + s.startMin;
-      const end = s.endHour * 60 + s.endMin;
-      return nowMins >= start && nowMins < end;
-    });
+    const current = room.schedule.find(
+      (s) => nowMins >= slotStart(s) && nowMins < slotEnd(s),
+    );
 
     if (current) {
       const endsAt = formatTime(current.endHour, current.endMin);
-      const minsLeft = current.endHour * 60 + current.endMin - nowMins;
+      const minsLeft = slotEnd(current) - nowMins;
+      const nextAfter = room.schedule.find((s) => slotStart(s) >= slotEnd(current));
 
-      const nextAfter = room.schedule
-        .filter(
-          (s) =>
-            s.startHour * 60 + s.startMin >=
-            current.endHour * 60 + current.endMin,
-        )
-        .sort(
-          (a, b) =>
-            a.startHour * 60 + a.startMin - (b.startHour * 60 + b.startMin),
-        );
-
-      if (nextAfter.length === 0) {
+      if (!nextAfter) {
         return `${current.label} ends at ${endsAt} (${minsLeft} min). Free after that for the rest of the day.`;
       }
 
-      const gap =
-        nextAfter[0].startHour * 60 +
-        nextAfter[0].startMin -
-        (current.endHour * 60 + current.endMin);
+      const gap = slotStart(nextAfter) - slotEnd(current);
 
       if (gap > 0) {
         return `${current.label} ends at ${endsAt} (${minsLeft} min). Then free for ${gap} min.`;
@@ -150,22 +106,14 @@ function buildScheduleBlocks(
   currentHour: number,
   currentMin: number,
 ): ScheduleBlock[] {
-  const nowMins = currentHour * 60 + currentMin;
-
-  const sorted = [...room.schedule].sort(
-    (a, b) => a.startHour * 60 + a.startMin - (b.startHour * 60 + b.startMin),
-  );
-
+  const nowMins = toMins(currentHour, currentMin);
   const blocks: ScheduleBlock[] = [];
   let cursor = DAY_START * 60;
   let foundNext = false;
 
-  for (const slot of sorted) {
-    const slotStart = slot.startHour * 60 + slot.startMin;
-    const slotEnd = slot.endHour * 60 + slot.endMin;
-
-    const effectiveStart = Math.max(slotStart, DAY_START * 60);
-    const effectiveEnd = Math.min(slotEnd, DAY_END * 60);
+  for (const slot of room.schedule) {
+    const effectiveStart = Math.max(slotStart(slot), DAY_START * 60);
+    const effectiveEnd = Math.min(slotEnd(slot), DAY_END * 60);
 
     if (effectiveEnd <= cursor) continue;
 
@@ -213,7 +161,7 @@ function buildScheduleBlocks(
 }
 
 function blockDurationMins(block: ScheduleBlock): number {
-  return block.endHour * 60 + block.endMin - (block.startHour * 60 + block.startMin);
+  return slotEnd(block) - slotStart(block);
 }
 
 export function RoomDetailPanel({
@@ -223,7 +171,7 @@ export function RoomDetailPanel({
   dayLabel,
   onClose,
 }: RoomDetailPanelProps) {
-  const nowMins = currentHour * 60 + currentMin;
+  const nowMins = toMins(currentHour, currentMin);
 
   const { status, label: statusLabel } = getRoomStatus(
     room,
@@ -231,7 +179,7 @@ export function RoomDetailPanel({
     currentMin,
   );
 
-  const style = statusStyles[status];
+  const style = STATUS_STYLES[status];
   const summary = getSummaryLine(
     room,
     status,
@@ -243,9 +191,7 @@ export function RoomDetailPanel({
   const blocks = buildScheduleBlocks(room, currentHour, currentMin);
 
   const totalClasses = room.schedule.length;
-  const remainingClasses = room.schedule.filter(
-    (s) => s.endHour * 60 + s.endMin > nowMins,
-  ).length;
+  const remainingClasses = room.schedule.filter((s) => slotEnd(s) > nowMins).length;
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -301,7 +247,7 @@ export function RoomDetailPanel({
             <div className="flex items-center gap-2.5">
               <div className={`w-2 h-2 rounded-full ${style.dot}`} />
               <span className={`text-[14px] font-medium ${style.text}`}>
-                {style.label}
+                {STATUS_TITLES[status]}
               </span>
             </div>
             <p className={`text-[13px] ${style.text} opacity-80 mt-1 ml-[18px]`}>
@@ -343,12 +289,8 @@ export function RoomDetailPanel({
               {blocks.map((block, i) => {
                 const duration = blockDurationMins(block);
                 const timeRange = `${formatTime(block.startHour, block.startMin)} - ${formatTime(block.endHour, block.endMin)}`;
-                const blockNowMins = currentHour * 60 + currentMin;
-                const blockStart = block.startHour * 60 + block.startMin;
-                const blockEnd = block.endHour * 60 + block.endMin;
-                const isPast = blockEnd <= blockNowMins;
-                const isCurrent =
-                  blockNowMins >= blockStart && blockNowMins < blockEnd;
+                const isPast = slotEnd(block) <= nowMins;
+                const isCurrent = nowMins >= slotStart(block) && nowMins < slotEnd(block);
 
                 if (block.type === "free") {
                   return (
@@ -413,9 +355,7 @@ export function RoomDetailPanel({
                                   : "text-muted-foreground"
                               }`}
                             >
-                              {duration >= 60
-                                ? `${Math.floor(duration / 60)}h ${duration % 60 > 0 ? `${duration % 60}m` : ""}`
-                                : `${duration}m`}
+                              {formatDuration(duration)}
                             </span>
                           </div>
                           {isCurrent && (
@@ -499,9 +439,7 @@ export function RoomDetailPanel({
                                 : "text-muted-foreground"
                             }`}
                           >
-                            {duration >= 60
-                              ? `${Math.floor(duration / 60)}h ${duration % 60 > 0 ? `${duration % 60}m` : ""}`
-                              : `${duration}m`}
+                            {formatDuration(duration)}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">

@@ -1,6 +1,8 @@
-import { Room, getRoomStatus, RoomStatus } from "../data/rooms";
-import { TimelineStrip } from "./timeline-strip";
-import { Clock, CircleCheck, CircleAlert, Timer, FlaskConical } from "lucide-react";
+import type { Room } from "../../lib/rooms/types";
+import { getRoomStatus } from "../../lib/rooms/status";
+import { TimelineStrip } from "./TimelineStrip";
+import { FlaskConical } from "lucide-react";
+import { STATUS_STYLES } from "./statusStyles";
 
 interface RoomCardProps {
   room: Room;
@@ -9,40 +11,6 @@ interface RoomCardProps {
   showNow?: boolean;
   onClick?: () => void;
 }
-
-const statusConfig: Record<
-  RoomStatus,
-  { bg: string; text: string; dot: string; border: string; icon: typeof Clock }
-> = {
-  free: {
-    bg: "bg-[#e8f5e9]",
-    text: "text-[#2e7d32]",
-    dot: "bg-[#4caf50]",
-    border: "border-[#c8e6c9]",
-    icon: CircleCheck,
-  },
-  occupied: {
-    bg: "bg-[#ffebee]",
-    text: "text-[#c62828]",
-    dot: "bg-[#ef5350]",
-    border: "border-[#ffcdd2]",
-    icon: CircleAlert,
-  },
-  "soon-free": {
-    bg: "bg-[#fff8e1]",
-    text: "text-[#f57f17]",
-    dot: "bg-[#ffb300]",
-    border: "border-[#ffecb3]",
-    icon: Timer,
-  },
-  "soon-occupied": {
-    bg: "bg-[#fff8e1]",
-    text: "text-[#f57f17]",
-    dot: "bg-[#ffb300]",
-    border: "border-[#ffecb3]",
-    icon: Timer,
-  },
-};
 
 export function LabTag() {
   return (
@@ -64,7 +32,7 @@ export function RoomCard({
   onClick,
 }: RoomCardProps) {
   const { status, label } = getRoomStatus(room, currentHour, currentMin);
-  const config = statusConfig[status];
+  const config = STATUS_STYLES[status];
   const Icon = config.icon;
 
   const statusLabel =

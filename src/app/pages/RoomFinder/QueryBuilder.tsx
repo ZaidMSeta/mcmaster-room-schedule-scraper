@@ -1,44 +1,11 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { formatTime } from "../data/rooms";
-
-export type Day =
-  | "today"
-  | "monday"
-  | "tuesday"
-  | "wednesday"
-  | "thursday"
-  | "friday";
-
-export type AvailabilityMode =
-  | { type: "right-now" }
-  | { type: "at-time"; hour: number; min: number }
-  | {
-      type: "time-range";
-      startHour: number;
-      startMin: number;
-      endHour: number;
-      endMin: number;
-    }
-  | {
-      type: "duration-from";
-      hours: number;
-      minutes: number;
-      startHour: number;
-      startMin: number;
-    };
-
-export interface QueryState {
-  building: string;
-  day: Day;
-  availability: AvailabilityMode;
-}
+import type { AvailabilityMode, Day, QueryState } from "../../lib/rooms/types";
+import { formatTime } from "../../lib/rooms/time";
 
 interface QueryBuilderProps {
   value: QueryState;
   onChange: (value: QueryState) => void;
-  onSubmit: () => void;
-  variant?: "full" | "compact";
   buildings: string[];
 }
 
@@ -63,12 +30,9 @@ const DAYS: { value: Day; label: string }[] = [
 export function QueryBuilder({
   value,
   onChange,
-  onSubmit,
-  variant = "full",
   buildings,
 }: QueryBuilderProps) {
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
-  const isCompact = variant === "compact";
 
   const closeMenus = () => setOpenMenu(null);
 
@@ -80,21 +44,15 @@ export function QueryBuilder({
     setOpenMenu((current) => (current === menu ? null : menu));
   };
 
-  const pillButtonClass = getPillButtonClass(isCompact);
-  const pillStaticClass = getPillStaticClass(isCompact);
-  const textClass = isCompact ? "text-[14px]" : "text-[17px]";
+  const pillButtonClass =
+    "h-7 px-2.5 text-[13px] inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/8 hover:bg-primary/12 text-primary font-medium transition-colors";
+  const textClass = "text-[14px]";
   // const binding keeps the discriminated-union narrowing inside callbacks
   const avail = value.availability;
 
   return (
-    <div className={isCompact ? "relative" : ""}>
-      <div
-        className={
-          isCompact
-            ? "flex items-center gap-2 flex-wrap"
-            : "flex items-center gap-2 flex-wrap text-[17px] leading-relaxed"
-        }
-      >
+    <div className="relative">
+      <div className="flex items-center gap-2 flex-wrap">
         <span className={`${textClass} text-muted-foreground`}>
           Find me a room in
         </span>
@@ -128,7 +86,8 @@ export function QueryBuilder({
                   Any building
                 </button>
 
-                {buildings.filter((b) => b !== "All Buildings").map((building) => (                  <button
+                {buildings.filter((b) => b !== "All Buildings").map((building) => (
+                  <button
                     key={building}
                     type="button"
                     onClick={() => {
@@ -460,15 +419,6 @@ export function QueryBuilder({
         )}
       </div>
 
-      {!isCompact && (
-        <button
-          type="button"
-          onClick={onSubmit}
-          className="mt-5 h-11 px-5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-[15px] font-medium transition-colors"
-        >
-          Show rooms
-        </button>
-      )}
     </div>
   );
 }
@@ -747,18 +697,6 @@ function getDefaultAvailability(
     startHour: 9,
     startMin: 0,
   };
-}
-
-function getPillButtonClass(isCompact: boolean) {
-  return `${
-    isCompact ? "h-7 px-2.5 text-[13px]" : "h-8 px-3 text-[15px]"
-  } inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/8 hover:bg-primary/12 text-primary font-medium transition-colors`;
-}
-
-function getPillStaticClass(isCompact: boolean) {
-  return `${
-    isCompact ? "h-7 px-2.5 text-[13px]" : "h-8 px-3 text-[15px]"
-  } inline-flex items-center rounded-md border border-primary/30 bg-primary/8 text-primary font-medium`;
 }
 
 function menuItemClass(selected: boolean) {

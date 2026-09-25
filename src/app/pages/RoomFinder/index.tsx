@@ -1,17 +1,18 @@
 import { useState, useMemo, useEffect } from "react";
 import { Search, ChevronDown } from "lucide-react";
-import { getRoomStatus, isRoomFreeAt, Room, RoomStatus } from "../data/rooms";
+import type { QueryState, RawRoomsFile, Room, RoomStatus } from "../../lib/rooms/types";
+import { getRoomStatus, isRoomFreeAt, isRoomFreeBetween } from "../../lib/rooms/status";
+import { toMins } from "../../lib/rooms/time";
 import {
   loadRoomsFile,
   getBuildingOptions,
   mapRawRoomToRoom,
   dayToDate,
   toIsoDate,
-  type RawRoomsFile,
-} from "../data/room-data";
-import { QueryBuilder, QueryState } from "./query-builder";
-import { RoomCard } from "./room-card";
-import { RoomDetailPanel } from "./room-detail-panel";
+} from "../../lib/rooms/data";
+import { QueryBuilder } from "./QueryBuilder";
+import { RoomCard } from "./RoomCard";
+import { RoomDetailPanel } from "./RoomDetailPanel";
 
 function formatDateLabel(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
@@ -22,7 +23,7 @@ function formatDateLabel(iso: string): string {
   });
 }
 
-export function MainPage() {
+export function RoomFinder() {
   // Re-render every 30s so "right now" statuses don't go stale while the page is open
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -99,27 +100,16 @@ export function MainPage() {
     }
 
     if (avail.type === "time-range") {
-      const startMins = avail.startHour * 60 + avail.startMin;
-      const endMins = avail.endHour * 60 + avail.endMin;
-      for (const slot of room.schedule) {
-        const slotStart = slot.startHour * 60 + slot.startMin;
-        const slotEnd = slot.endHour * 60 + slot.endMin;
-        if (slotStart < endMins && slotEnd > startMins) return false;
-      }
-      return true;
+      return isRoomFreeBetween(
+        room,
+        toMins(avail.startHour, avail.startMin),
+        toMins(avail.endHour, avail.endMin),
+      );
     }
 
-
     if (avail.type === "duration-from") {
-      const requiredMins = avail.hours * 60 + avail.minutes;
-      const startMins = avail.startHour * 60 + avail.startMin;
-      const endMins = startMins + requiredMins;
-      for (const slot of room.schedule) {
-        const slotStart = slot.startHour * 60 + slot.startMin;
-        const slotEnd = slot.endHour * 60 + slot.endMin;
-        if (slotStart < endMins && slotEnd > startMins) return false;
-      }
-      return true;
+      const startMins = toMins(avail.startHour, avail.startMin);
+      return isRoomFreeBetween(room, startMins, startMins + toMins(avail.hours, avail.minutes));
     }
 
     return true;
@@ -187,8 +177,6 @@ export function MainPage() {
           <QueryBuilder
             value={query}
             onChange={setQuery}
-            onSubmit={() => {}}
-            variant="compact"
             buildings={buildings}
           />
         </div>

@@ -1,4 +1,5 @@
-import type { TimeSlot } from "../data/rooms";
+import type { TimeSlot } from "../../lib/rooms/types";
+import { DAY_END_HOUR, DAY_START_HOUR, slotEnd, toMins } from "../../lib/rooms/time";
 
 interface TimelineStripProps {
   schedule: TimeSlot[];
@@ -6,8 +7,8 @@ interface TimelineStripProps {
   showNow?: boolean;
 }
 
-const DAY_START = 8;  // 8 AM
-const DAY_END = 22;  // 10 PM
+const DAY_START = DAY_START_HOUR;
+const DAY_END = DAY_END_HOUR;
 const TOTAL_HOURS = DAY_END - DAY_START;
 
 export function TimelineStrip({
@@ -18,14 +19,14 @@ export function TimelineStrip({
   const now = new Date();
   const currentHour = now.getHours();
   const currentMin = now.getMinutes();
-  const nowMins = currentHour * 60 + currentMin;
+  const nowMins = toMins(currentHour, currentMin);
 
   const dayStartMins = DAY_START * 60;
   const dayEndMins = DAY_END * 60;
   const totalMins = dayEndMins - dayStartMins;
 
   const getPercent = (hour: number, min: number) => {
-    const mins = hour * 60 + min;
+    const mins = toMins(hour, min);
     return ((mins - dayStartMins) / totalMins) * 100;
   };
 
@@ -67,8 +68,7 @@ export function TimelineStrip({
 
           if (width <= 0) return null;
 
-          const slotEndMins = slot.endHour * 60 + slot.endMin;
-          const isPast = slotEndMins <= nowMins;
+          const isPast = slotEnd(slot) <= nowMins;
 
           return (
             <div

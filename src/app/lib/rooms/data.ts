@@ -1,47 +1,5 @@
-import type { Room } from "./rooms";
-import type { Day } from "../components/query-builder";
-
-export interface RawMeeting {
-  term: string;
-  course: string;
-  component: string;
-  section: string;
-  day: number;
-  startMin: number;
-  endMin: number;
-  startHour: number;
-  startMinute: number;
-  endHour: number;
-  endMinute: number;
-  startDate?: string; // YYYY-MM-DD
-  endDate?: string;   // YYYY-MM-DD
-  label: string;
-  teachers: string[];
-}
-
-export interface RawRoom {
-  roomId: string;
-  buildingCode: string;
-  buildingName: string;
-  roomNumber: string;
-  meetings: RawMeeting[];
-}
-
-export interface RawBuilding {
-  code: string;
-  name: string;
-}
-
-export interface RawRoomsFile {
-  term: string;
-  termName?: string;
-  termStart?: string; // YYYY-MM-DD
-  termEnd?: string;   // YYYY-MM-DD
-  sourceFolder: string;
-  generatedAt: string;
-  buildings: RawBuilding[];
-  rooms: RawRoom[];
-}
+import type { Day, RawMeeting, RawRoom, RawRoomsFile, Room } from "./types";
+import { slotStart } from "./time";
 
 export async function loadRoomsFile(): Promise<RawRoomsFile> {
   const response = await fetch("/rooms.json");
@@ -109,10 +67,7 @@ export function mapRawRoomToRoom(rawRoom: RawRoom, date: Date): Room {
         endMin: meeting.endMinute,
         label: meeting.label,
       }))
-      .sort(
-        (a, b) =>
-          a.startHour * 60 + a.startMin - (b.startHour * 60 + b.startMin),
-      ),
+      .sort((a, b) => slotStart(a) - slotStart(b)),
   };
 }
 
