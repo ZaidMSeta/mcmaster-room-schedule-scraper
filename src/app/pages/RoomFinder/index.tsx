@@ -1,5 +1,14 @@
-import { useState, useMemo, useEffect } from "react";
-import { Search, ChevronDown } from "lucide-react";
+import { useState, useMemo, useEffect, type ReactNode } from "react";
+import { Search } from "lucide-react";
+import { Card } from "../../components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
+import { cn } from "../../components/ui/utils";
 import type { QueryState, RawRoomsFile, Room, RoomStatus } from "../../lib/rooms/types";
 import { getRoomStatus, isRoomFreeAt, isRoomFreeBetween } from "../../lib/rooms/status";
 import { toMins } from "../../lib/rooms/time";
@@ -13,6 +22,7 @@ import {
 import { QueryBuilder } from "./QueryBuilder";
 import { RoomCard } from "./RoomCard";
 import { RoomDetailPanel } from "./RoomDetailPanel";
+import { TIMELINE, TONE_STYLES } from "./statusStyles";
 
 function formatDateLabel(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
@@ -156,157 +166,125 @@ export function RoomFinder() {
   }).length;
 
   return (
-    <div className="bg-background min-h-screen">
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <div className="mb-6">
-          <h1 className="text-[28px] font-medium text-foreground tracking-tight mb-1.5">
-            Find an empty classroom
-          </h1>
-          <p className="text-[15px] text-muted-foreground">
-            Search available rooms across campus based on the class schedule.
-          </p>
-          {rawData && (
-            <p className="text-[13px] text-muted-foreground mt-1">
-              {rawData.termName ? `${rawData.termName} timetable` : "Timetable"} · showing{" "}
-              {formatDateLabel(selectedIso)}
-            </p>
-          )}
-        </div>
-
-        <div className="bg-card rounded-xl border border-border shadow-sm p-5 mb-6">
-          <QueryBuilder
-            value={query}
-            onChange={setQuery}
-            buildings={buildings}
-          />
-        </div>
-
-        {loadError ? (
-          <div className="bg-card rounded-xl border border-border shadow-sm p-12 text-center">
-            <p className="text-[15px] font-medium text-foreground mb-1">
-              Failed to load room data
-            </p>
-            <p className="text-[13px] text-muted-foreground">
-              Could not fetch rooms.json. Try refreshing the page.
-            </p>
-          </div>
-        ) : !rawData ? (
-          <div className="bg-card rounded-xl border border-border shadow-sm p-12 text-center">
-            <p className="text-[15px] font-medium text-foreground mb-1">
-              Loading rooms...
-            </p>
-            <p className="text-[13px] text-muted-foreground">
-              Reading timetable data.
-            </p>
-          </div>
-        ) : (
-          <>
-            {outOfTerm && (
-              <div className="rounded-xl border border-[#ffecb3] bg-[#fff8e1] px-4 py-3 mb-4 text-[13px] text-[#f57f17]">
-                Classes aren't in session on {formatDateLabel(selectedIso)} (
-                {rawData.termName ?? "this term"} runs {formatDateLabel(rawData.termStart!)} to{" "}
-                {formatDateLabel(rawData.termEnd!)}), so every room shows as free.
-              </div>
-            )}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-              <div className="flex items-baseline gap-2">
-                <span className="text-[15px] font-medium text-foreground">
-                  {filteredRooms.length} room{filteredRooms.length !== 1 ? "s" : ""}
-                </span>
-                <span className="text-[13px] text-muted-foreground">
-                  {freeCount} available
-                </span>
-              </div>
-
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] text-muted-foreground">Sort:</span>
-                  <div className="relative">
-                    <select
-                      value={sortBy}
-                      onChange={(e) =>
-                        setSortBy(e.target.value as "building" | "status")
-                      }
-                      className="h-8 pl-3 pr-8 rounded-lg border border-border bg-card text-foreground appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors text-[13px]"
-                    >
-                      <option value="status">Availability</option>
-                      <option value="building">Building</option>
-                    </select>
-                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
-                  </div>
-                </div>
-
-                <div className="hidden sm:flex items-center gap-3 text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-1.5">
-                    <span
-                      className="w-3 h-2 rounded-sm inline-block"
-                      style={{ backgroundColor: "#e8f5e9" }}
-                    />
-                    Free
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span
-                      className="w-3 h-2 rounded-sm inline-block"
-                      style={{ backgroundColor: "#ef9a9a" }}
-                    />
-                    Class
-                  </span>
-                  {query.day === "today" && (
-                    <span className="flex items-center gap-1.5">
-                      <span
-                        className="w-[2px] h-3 inline-block"
-                        style={{ backgroundColor: "#2d3748" }}
-                      />
-                      Now
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {filteredRooms.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {filteredRooms.map((room) => (
-                  <RoomCard
-                    key={room.id}
-                    room={room}
-                    currentHour={refTime.hour}
-                    currentMin={refTime.min}
-                    showNow={query.day === "today"}
-                    onClick={() => setSelectedRoomId(room.id)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="bg-card rounded-xl border border-border shadow-sm p-12 text-center">
-                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-                  <Search className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <p className="text-[15px] font-medium text-foreground mb-1">
-                  No rooms found
-                </p>
-                <p className="text-[13px] text-muted-foreground">
-                  Try adjusting your search criteria.
-                </p>
-              </div>
-            )}
-          </>
-        )}
-
-        <p className="text-[12px] text-muted-foreground/50 text-center mt-8 pb-4">
-          Results are based on timetable data and may not reflect real-time occupancy.
+    <div className="container mx-auto max-w-5xl px-4 py-10 space-y-6">
+      <div>
+        <h1 className="text-3xl md:text-4xl font-bold text-foreground">Find an empty classroom</h1>
+        <p className="text-muted-foreground mt-1">
+          Search available rooms across campus based on the class schedule.
         </p>
+        {rawData && (
+          <p className="text-sm text-muted-foreground mt-1">
+            {rawData.termName ? `${rawData.termName} timetable` : "Timetable"} · showing{" "}
+            {formatDateLabel(selectedIso)}
+          </p>
+        )}
       </div>
 
-      {selectedRoom && (
-        <RoomDetailPanel
-          room={selectedRoom}
-          currentHour={refTime.hour}
-          currentMin={refTime.min}
-          dayLabel={query.day === "today" ? "today" : formatDateLabel(selectedIso).split(",")[0]}
-          onClose={() => setSelectedRoomId(null)}
-        />
+      <Card className="p-5 gap-0">
+        <QueryBuilder value={query} onChange={setQuery} buildings={buildings} />
+      </Card>
+
+      {loadError ? (
+        <MessageCard title="Failed to load room data" body="Could not fetch rooms.json. Try refreshing the page." />
+      ) : !rawData ? (
+        <MessageCard title="Loading rooms..." body="Reading timetable data." />
+      ) : (
+        <div className="space-y-4">
+          {outOfTerm && (
+            <div className={cn("rounded-xl border px-4 py-3 text-sm", TONE_STYLES.soon.soft, TONE_STYLES.soon.text)}>
+              Classes aren't in session on {formatDateLabel(selectedIso)} (
+              {rawData.termName ?? "this term"} runs {formatDateLabel(rawData.termStart!)} to{" "}
+              {formatDateLabel(rawData.termEnd!)}), so every room shows as free.
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-baseline gap-2">
+              <span className="font-semibold text-foreground">
+                {filteredRooms.length} room{filteredRooms.length !== 1 ? "s" : ""}
+              </span>
+              <span className="text-sm text-muted-foreground">{freeCount} available</span>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Sort:</span>
+                <Select value={sortBy} onValueChange={(v) => setSortBy(v as "building" | "status")}>
+                  <SelectTrigger size="sm" className="w-[140px]" aria-label="Sort rooms">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="status">Availability</SelectItem>
+                    <SelectItem value="building">Building</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground" aria-hidden>
+                <span className="flex items-center gap-1.5">
+                  <span className={cn("w-3 h-2 rounded-sm", TIMELINE.track)} />
+                  Free
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className={cn("w-3 h-2 rounded-sm", TIMELINE.class)} />
+                  Class
+                </span>
+                {query.day === "today" && (
+                  <span className="flex items-center gap-1.5">
+                    <span className={cn("w-[2px] h-3", TIMELINE.now)} />
+                    Now
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {filteredRooms.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {filteredRooms.map((room) => (
+                <RoomCard
+                  key={room.id}
+                  room={room}
+                  currentHour={refTime.hour}
+                  currentMin={refTime.min}
+                  showNow={query.day === "today"}
+                  onClick={() => setSelectedRoomId(room.id)}
+                />
+              ))}
+            </div>
+          ) : (
+            <MessageCard
+              icon={<Search className="size-5 text-muted-foreground" />}
+              title="No rooms found"
+              body="Try adjusting your search criteria."
+            />
+          )}
+        </div>
       )}
+
+      <p className="text-xs text-muted-foreground text-center">
+        Results are based on timetable data and may not reflect real-time occupancy.
+      </p>
+
+      <RoomDetailPanel
+        room={selectedRoom}
+        currentHour={refTime.hour}
+        currentMin={refTime.min}
+        dayLabel={query.day === "today" ? "today" : formatDateLabel(selectedIso).split(",")[0]}
+        onClose={() => setSelectedRoomId(null)}
+      />
     </div>
+  );
+}
+
+function MessageCard({ icon, title, body }: { icon?: ReactNode; title: string; body: string }) {
+  return (
+    <Card className="p-12 gap-0 items-center text-center">
+      {icon && (
+        <div className="size-12 rounded-full bg-muted flex items-center justify-center mb-4">{icon}</div>
+      )}
+      <p className="font-medium text-foreground mb-1">{title}</p>
+      <p className="text-sm text-muted-foreground">{body}</p>
+    </Card>
   );
 }

@@ -1,8 +1,11 @@
+import { FlaskConical } from "lucide-react";
 import type { Room } from "../../lib/rooms/types";
 import { getRoomStatus } from "../../lib/rooms/status";
+import { Badge } from "../../components/ui/badge";
+import { Card } from "../../components/ui/card";
+import { cn } from "../../components/ui/utils";
 import { TimelineStrip } from "./TimelineStrip";
-import { FlaskConical } from "lucide-react";
-import { STATUS_STYLES } from "./statusStyles";
+import { STATUS_STYLES, TONE_STYLES } from "./statusStyles";
 
 interface RoomCardProps {
   room: Room;
@@ -14,13 +17,14 @@ interface RoomCardProps {
 
 export function LabTag() {
   return (
-    <span
-      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground text-[11px] font-medium"
+    <Badge
+      variant="secondary"
+      className="text-muted-foreground"
       title="Only used for labs this term, so it may be locked outside class times"
     >
-      <FlaskConical className="w-3 h-3" />
+      <FlaskConical />
       Lab – may be locked
-    </span>
+    </Badge>
   );
 }
 
@@ -32,24 +36,16 @@ export function RoomCard({
   onClick,
 }: RoomCardProps) {
   const { status, label } = getRoomStatus(room, currentHour, currentMin);
-  const config = STATUS_STYLES[status];
-  const Icon = config.icon;
-
-  const statusLabel =
-    status === "free"
-      ? "Available"
-      : status === "occupied"
-        ? "Occupied"
-        : status === "soon-free"
-          ? "Freeing up"
-          : "Filling soon";
+  const { tone, label: statusLabel, icon: Icon } = STATUS_STYLES[status];
+  const toneStyle = TONE_STYLES[tone];
 
   return (
-    <div
-      className="bg-card rounded-xl border border-border shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer hover:border-primary/20"
+    <Card
+      className="gap-0 p-4 cursor-pointer transition-all duration-200 hover:shadow-lg hover:border-primary/40 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring"
       onClick={onClick}
       role="button"
       tabIndex={0}
+      aria-label={`${room.buildingCode} ${room.roomNumber}, ${statusLabel}, ${label}`}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -57,40 +53,30 @@ export function RoomCard({
         }
       }}
     >
-      <div className="p-4">
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-[17px] font-medium text-foreground tracking-tight">
-                {room.buildingCode} {room.roomNumber}
-              </span>
-              {room.isLab && <LabTag />}
-            </div>
-            <p className="text-[13px] text-muted-foreground mt-0.5">
-              {room.building}
-            </p>
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="font-semibold text-foreground leading-tight">
+              {room.buildingCode} {room.roomNumber}
+            </h4>
+            {room.isLab && <LabTag />}
           </div>
-
-          <div
-            className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${config.bg} ${config.text} border ${config.border}`}
-          >
-            <Icon className="w-3 h-3" />
-            {statusLabel}
-          </div>
+          <p className="text-sm text-muted-foreground mt-0.5 truncate">{room.building}</p>
         </div>
 
-        <div className="flex items-center gap-2 mb-3">
-          <div className={`w-2 h-2 rounded-full ${config.dot}`} />
-          <span className="text-[13px] text-foreground">{label}</span>
-        </div>
-
-        <div>
-          <p className="text-[11px] text-muted-foreground mb-1.5 uppercase tracking-wide">
-            Schedule
-          </p>
-          <TimelineStrip schedule={room.schedule} compact showNow={showNow} />
-        </div>
+        <Badge variant="outline" className={cn("rounded-full shrink-0", toneStyle.soft, toneStyle.text)}>
+          <Icon />
+          {statusLabel}
+        </Badge>
       </div>
-    </div>
+
+      <div className="flex items-center gap-2 mb-3">
+        <span className={cn("size-2 rounded-full", toneStyle.dot)} />
+        <span className="text-sm text-foreground">{label}</span>
+      </div>
+
+      <p className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wide">Schedule</p>
+      <TimelineStrip schedule={room.schedule} compact showNow={showNow} />
+    </Card>
   );
 }

@@ -18,10 +18,18 @@
   "license": "ISC",
   "description": "Scrapes McMaster's MyTimetable and shows which classrooms are free",
   "dependencies": {
+    "@radix-ui/react-dialog": "1.1.6",
+    "@radix-ui/react-popover": "1.1.6",
+    "@radix-ui/react-select": "2.1.6",
+    "@radix-ui/react-slot": "1.1.2",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "lucide-react": "0.487.0",
+    "next-themes": "0.4.6",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-router": "7.18.2",
-    "lucide-react": "0.487.0",
+    "tailwind-merge": "3.2.0",
     "tw-animate-css": "1.3.8"
   },
   "devDependencies": {

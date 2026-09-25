@@ -1,7 +1,16 @@
-import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import type { AvailabilityMode, Day, QueryState } from "../../lib/rooms/types";
 import { formatTime } from "../../lib/rooms/time";
+import { Button } from "../../components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
+import { cn } from "../../components/ui/utils";
 
 interface QueryBuilderProps {
   value: QueryState;
@@ -9,14 +18,7 @@ interface QueryBuilderProps {
   buildings: string[];
 }
 
-type OpenMenu =
-  | null
-  | "building"
-  | "day"
-  | "availability-mode"
-  | "start-time"
-  | "end-time"
-  | "duration";
+type OpenPopover = null | "start-time" | "end-time" | "duration";
 
 const DAYS: { value: Day; label: string }[] = [
   { value: "today", label: "Today" },
@@ -27,590 +29,295 @@ const DAYS: { value: Day; label: string }[] = [
   { value: "friday", label: "Friday" },
 ];
 
-export function QueryBuilder({
-  value,
-  onChange,
-  buildings,
-}: QueryBuilderProps) {
-  const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
+const MODE_TRIGGER_LABEL: Record<AvailabilityMode["type"], string> = {
+  "right-now": "right now",
+  "at-time": "at",
+  "time-range": "from",
+  "duration-from": "for at least",
+};
 
-  const closeMenus = () => setOpenMenu(null);
+const PILL =
+  "h-8 w-auto gap-1.5 rounded-md border-primary/30 bg-primary/10 px-2.5 text-sm font-medium text-primary hover:bg-primary/15 dark:bg-primary/10 dark:hover:bg-primary/15 [&_svg:not([class*='text-'])]:text-primary/70";
+
+const INPUT =
+  "w-full h-9 px-2.5 rounded-md border bg-input-background text-foreground text-sm focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
+
+export function QueryBuilder({ value, onChange, buildings }: QueryBuilderProps) {
+  const [openPopover, setOpenPopover] = useState<OpenPopover>(null);
+  // const binding keeps the discriminated-union narrowing inside callbacks
+  const avail = value.availability;
+  const isToday = value.day === "today";
 
   const updateAvailability = (availability: AvailabilityMode) => {
     onChange({ ...value, availability });
   };
 
-  const openOnly = (menu: OpenMenu) => {
-    setOpenMenu((current) => (current === menu ? null : menu));
+  const popoverProps = (name: Exclude<OpenPopover, null>) => ({
+    open: openPopover === name,
+    onOpenChange: (open: boolean) => setOpenPopover(open ? name : null),
+  });
+
+  const changeDay = (newDay: Day) => {
+    let newAvailability = avail;
+
+    // switching away from today: right-now doesn't apply, default to at-time
+    if (newDay !== "today" && avail.type === "right-now") {
+      const now = new Date();
+      newAvailability = { type: "at-time", hour: now.getHours(), min: now.getMinutes() };
+    }
+
+    // switching back to today: at-time becomes right-now
+    if (newDay === "today" && avail.type === "at-time") {
+      newAvailability = { type: "right-now" };
+    }
+
+    onChange({ ...value, day: newDay, availability: newAvailability });
   };
 
-  const pillButtonClass =
-    "h-7 px-2.5 text-[13px] inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/8 hover:bg-primary/12 text-primary font-medium transition-colors";
-  const textClass = "text-[14px]";
-  // const binding keeps the discriminated-union narrowing inside callbacks
-  const avail = value.availability;
+  const timePill = (
+    name: "start-time" | "end-time",
+    label: string,
+    hour: number,
+    minute: number,
+    onApply: (hour: number, minute: number) => void,
+  ) => (
+    <Popover {...popoverProps(name)}>
+      <PopoverTrigger asChild>
+        <button type="button" className={cn(PILL, "inline-flex items-center border")}>
+          {formatTime(hour, minute)}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-56 p-3">
+        <TimeForm
+          label={label}
+          hour={hour}
+          minute={minute}
+          onApply={(h, m) => {
+            onApply(h, m);
+            setOpenPopover(null);
+          }}
+          onCancel={() => setOpenPopover(null)}
+        />
+      </PopoverContent>
+    </Popover>
+  );
 
   return (
-    <div className="relative">
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className={`${textClass} text-muted-foreground`}>
-          Find me a room in
-        </span>
+    <div className="flex items-center gap-2 flex-wrap">
+      <Text>Find me a room in</Text>
 
-        <div className="relative inline-block">
-          <button
-            onClick={() => openOnly("building")}
-            className={pillButtonClass}
-            type="button"
-          >
+      <Select value={value.building} onValueChange={(building) => onChange({ ...value, building })}>
+        <SelectTrigger size="sm" className={cn(PILL, "max-w-[16rem]")} aria-label="Building">
+          <SelectValue>
             {value.building === "All Buildings" ? "any building" : value.building}
-            <ChevronDown className="w-3.5 h-3.5 opacity-60" />
-          </button>
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent className="max-h-80">
+          {buildings.map((building) => (
+            <SelectItem key={building} value={building}>
+              {building === "All Buildings" ? "Any building" : building}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
-          {openMenu === "building" && (
-            <>
-              <MenuBackdrop onClose={closeMenus} />
-              <div className="absolute top-full left-0 mt-1.5 min-w-[220px] bg-card rounded-lg border border-border shadow-lg z-40 py-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChange({ ...value, building: "All Buildings" });
-                    closeMenus();
-                  }}
-                  className={`w-full px-3.5 py-2 text-left text-[14px] hover:bg-accent transition-colors ${
-                    value.building === "All Buildings"
-                      ? "bg-primary/8 text-primary font-medium"
-                      : "text-foreground"
-                  }`}
-                >
-                  Any building
-                </button>
+      <Text>on</Text>
 
-                {buildings.filter((b) => b !== "All Buildings").map((building) => (
-                  <button
-                    key={building}
-                    type="button"
-                    onClick={() => {
-                      onChange({ ...value, building });
-                      closeMenus();
-                    }}
-                    className={`w-full px-3.5 py-2 text-left text-[14px] hover:bg-accent transition-colors ${
-                      value.building === building
-                        ? "bg-primary/8 text-primary font-medium"
-                        : "text-foreground"
-                    }`}
-                  >
-                    {building}
-                  </button>
-                ))}
-              </div>
-            </>
+      <Select value={value.day} onValueChange={(day) => changeDay(day as Day)}>
+        <SelectTrigger size="sm" className={PILL} aria-label="Day">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {DAYS.map((day) => (
+            <SelectItem key={day.value} value={day.value}>
+              {day.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Text>that is free</Text>
+
+      <Select
+        value={avail.type}
+        onValueChange={(type) =>
+          updateAvailability(getDefaultAvailability(type as AvailabilityMode["type"], avail))
+        }
+      >
+        <SelectTrigger size="sm" className={PILL} aria-label="Availability">
+          <SelectValue>{MODE_TRIGGER_LABEL[avail.type]}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {isToday ? (
+            <SelectItem value="right-now">Right now</SelectItem>
+          ) : (
+            <SelectItem value="at-time">At a time</SelectItem>
           )}
-        </div>
+          <SelectItem value="time-range">Between two times</SelectItem>
+          <SelectItem value="duration-from">For a length of time</SelectItem>
+        </SelectContent>
+      </Select>
 
-        <span className={`${textClass} text-muted-foreground`}>on</span>
+      {avail.type === "at-time" &&
+        timePill("start-time", "Time", avail.hour, avail.min, (hour, min) =>
+          updateAvailability({ type: "at-time", hour, min }),
+        )}
 
-        <div className="relative inline-block">
-          <button
-            onClick={() => openOnly("day")}
-            className={pillButtonClass}
-            type="button"
-          >
-            {getDayLabel(value.day)}
-            <ChevronDown className="w-3.5 h-3.5 opacity-60" />
-          </button>
-
-          {openMenu === "day" && (
-            <>
-              <MenuBackdrop onClose={closeMenus} />
-              <div className="absolute top-full left-0 mt-1.5 min-w-[140px] bg-card rounded-lg border border-border shadow-lg z-40 py-1">
-                {DAYS.map((day) => (
-                  <button
-                    key={day.value}
-                    type="button"
-                    onClick={() => {
-                      const newDay = day.value;
-                      let newAvailability = avail;
-
-                      // switching away from today: right-now doesn't apply, default to at-time
-                      if (newDay !== "today" && avail.type === "right-now") {
-                        const now = new Date();
-                        newAvailability = { type: "at-time", hour: now.getHours(), min: now.getMinutes() };
-                      }
-
-                      // switching back to today: at-time becomes right-now
-                      if (newDay === "today" && avail.type === "at-time") {
-                        newAvailability = { type: "right-now" };
-                      }
-
-                      onChange({ ...value, day: newDay, availability: newAvailability });
-                      closeMenus();
-                    }}
-                    className={`w-full px-3.5 py-2 text-left text-[14px] hover:bg-accent transition-colors ${
-                      value.day === day.value
-                        ? "bg-primary/8 text-primary font-medium"
-                        : "text-foreground"
-                    }`}
-                  >
-                    {day.label}
-                  </button>
-                ))}
-              </div>
-            </>
+      {avail.type === "time-range" && (
+        <>
+          {timePill("start-time", "Start time", avail.startHour, avail.startMin, (hour, minute) =>
+            updateAvailability({ ...avail, startHour: hour, startMin: minute }),
           )}
-        </div>
+          <Text>to</Text>
+          {timePill("end-time", "End time", avail.endHour, avail.endMin, (hour, minute) => {
+            const startMins = avail.startHour * 60 + avail.startMin;
+            const endMins = hour * 60 + minute;
+            // clamp: end must be at least 30 min after start
+            const clamped = Math.min(1410, endMins <= startMins ? startMins + 30 : endMins);
+            updateAvailability({
+              ...avail,
+              endHour: Math.floor(clamped / 60),
+              endMin: clamped % 60,
+            });
+          })}
+        </>
+      )}
 
-        <span className={`${textClass} text-muted-foreground`}>that is free</span>
-
-        {avail.type === "right-now" && (
-          <div className="relative inline-block">
-            <button
-              type="button"
-              onClick={() => openOnly("availability-mode")}
-              className={pillButtonClass}
-            >
-              right now
-              <ChevronDown className="w-3.5 h-3.5 opacity-60" />
-            </button>
-
-            {openMenu === "availability-mode" && (
-              <AvailabilityModeMenu
-                current={avail}
-                onSelect={(next) => {
-                  updateAvailability(next);
-                  closeMenus();
+      {avail.type === "duration-from" && (
+        <>
+          <Popover {...popoverProps("duration")}>
+            <PopoverTrigger asChild>
+              <button type="button" className={cn(PILL, "inline-flex items-center border")}>
+                {formatDuration(avail.hours, avail.minutes)}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-60 p-3">
+              <DurationForm
+                hours={avail.hours}
+                minutes={avail.minutes}
+                onApply={(hours, minutes) => {
+                  updateAvailability({ ...avail, hours, minutes });
+                  setOpenPopover(null);
                 }}
-                onClose={closeMenus}
-                isToday={true}
+                onCancel={() => setOpenPopover(null)}
               />
-            )}
-          </div>
-        )}
-
-        {avail.type === "at-time" && (
-          <>
-            <div className="relative inline-block">
-              <button
-                type="button"
-                onClick={() => openOnly("availability-mode")}
-                className={pillButtonClass}
-              >
-                at
-                <ChevronDown className="w-3.5 h-3.5 opacity-60" />
-              </button>
-
-              {openMenu === "availability-mode" && (
-                <AvailabilityModeMenu
-                  current={avail}
-                  onSelect={(next) => {
-                    updateAvailability(next);
-                    closeMenus();
-                  }}
-                  onClose={closeMenus}
-                  isToday={false}
-                />
-              )}
-            </div>
-
-            <div className="relative inline-block">
-              <button
-                type="button"
-                onClick={() => openOnly("start-time")}
-                className={pillButtonClass}
-              >
-                {formatTime(avail.hour, avail.min)}
-              </button>
-
-              {openMenu === "start-time" && (
-                <TimePopover
-                  label="Time"
-                  hour={avail.hour}
-                  minute={avail.min}
-                  onApply={(hour, minute) => {
-                    updateAvailability({ type: "at-time", hour, min: minute });
-                    closeMenus();
-                  }}
-                  onClose={closeMenus}
-                />
-              )}
-            </div>
-          </>
-        )}
-
-        {avail.type === "time-range" && (
-          <>
-            <div className="relative inline-block">
-              <button
-                type="button"
-                onClick={() => openOnly("availability-mode")}
-                className={pillButtonClass}
-              >
-                from
-                <ChevronDown className="w-3.5 h-3.5 opacity-60" />
-              </button>
-
-              {openMenu === "availability-mode" && (
-                <AvailabilityModeMenu
-                  current={avail}
-                  onSelect={(next) => {
-                    updateAvailability(next);
-                    closeMenus();
-                  }}
-                  onClose={closeMenus}
-                  isToday={value.day === "today"}
-                />
-              )}
-            </div>
-
-            <div className="relative inline-block">
-              <button
-                type="button"
-                onClick={() => openOnly("start-time")}
-                className={pillButtonClass}
-              >
-                {formatTime(
-                  avail.startHour,
-                  avail.startMin,
-                )}
-              </button>
-
-              {openMenu === "start-time" && (
-                <TimePopover
-                  label="Start time"
-                  hour={avail.startHour}
-                  minute={avail.startMin}
-                  onApply={(hour, minute) => {
-                    updateAvailability({
-                      ...avail,
-                      startHour: hour,
-                      startMin: minute,
-                    });
-                    closeMenus();
-                  }}
-                  onClose={closeMenus}
-                />
-              )}
-            </div>
-
-            <span className={`${textClass} text-muted-foreground`}>to</span>
-
-            <div className="relative inline-block">
-              <button
-                type="button"
-                onClick={() => openOnly("end-time")}
-                className={pillButtonClass}
-              >
-                {formatTime(avail.endHour, avail.endMin)}
-              </button>
-
-              {openMenu === "end-time" && (
-                <TimePopover
-                  label="End time"
-                  hour={avail.endHour}
-                  minute={avail.endMin}
-                  onApply={(hour, minute) => {
-                    const startMins = avail.startHour * 60 + avail.startMin;
-                    const endMins = hour * 60 + minute;
-                    // clamp: end must be at least 30 min after start
-                    const clamped = Math.min(1410, endMins <= startMins ? startMins + 30 : endMins);
-                    updateAvailability({
-                      ...avail,
-                      endHour: Math.floor(clamped / 60),
-                      endMin: clamped % 60,
-                    });
-                    closeMenus();
-                  }}
-                  onClose={closeMenus}
-                />
-              )}
-            </div>
-          </>
-        )}
-
-
-        {avail.type === "duration-from" && (
-          <>
-            <div className="relative inline-block">
-              <button
-                type="button"
-                onClick={() => openOnly("availability-mode")}
-                className={pillButtonClass}
-              >
-                for at least
-                <ChevronDown className="w-3.5 h-3.5 opacity-60" />
-              </button>
-
-              {openMenu === "availability-mode" && (
-                <AvailabilityModeMenu
-                  current={avail}
-                  onSelect={(next) => {
-                    updateAvailability(next);
-                    closeMenus();
-                  }}
-                  onClose={closeMenus}
-                  isToday={value.day === "today"}
-                />
-              )}
-            </div>
-
-            <div className="relative inline-block">
-              <button
-                type="button"
-                onClick={() => openOnly("duration")}
-                className={pillButtonClass}
-              >
-                {formatDuration(
-                  avail.hours,
-                  avail.minutes,
-                )}
-              </button>
-
-              {openMenu === "duration" && (
-                <DurationPopover
-                  hours={avail.hours}
-                  minutes={avail.minutes}
-                  onApply={(hours, minutes) => {
-                    updateAvailability({
-                      ...avail,
-                      hours,
-                      minutes,
-                    });
-                    closeMenus();
-                  }}
-                  onClose={closeMenus}
-                />
-              )}
-            </div>
-
-            <span className={`${textClass} text-muted-foreground`}>
-              starting at
-            </span>
-
-            <div className="relative inline-block">
-              <button
-                type="button"
-                onClick={() => openOnly("start-time")}
-                className={pillButtonClass}
-              >
-                {formatTime(
-                  avail.startHour,
-                  avail.startMin,
-                )}
-              </button>
-
-              {openMenu === "start-time" && (
-                <TimePopover
-                  label="Start time"
-                  hour={avail.startHour}
-                  minute={avail.startMin}
-                  onApply={(hour, minute) => {
-                    updateAvailability({
-                      ...avail,
-                      startHour: hour,
-                      startMin: minute,
-                    });
-                    closeMenus();
-                  }}
-                  onClose={closeMenus}
-                />
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
+            </PopoverContent>
+          </Popover>
+          <Text>starting at</Text>
+          {timePill("start-time", "Start time", avail.startHour, avail.startMin, (hour, minute) =>
+            updateAvailability({ ...avail, startHour: hour, startMin: minute }),
+          )}
+        </>
+      )}
     </div>
   );
 }
 
-function AvailabilityModeMenu({
-  current,
-  onSelect,
-  onClose,
-  isToday,
-}: {
-  current: AvailabilityMode;
-  onSelect: (next: AvailabilityMode) => void;
-  onClose: () => void;
-  isToday: boolean;
-}) {
+function Text({ children }: { children: ReactNode }) {
+  return <span className="text-sm text-muted-foreground">{children}</span>;
+}
+
+function FormActions({ onCancel, onApply }: { onCancel: () => void; onApply: () => void }) {
   return (
-    <>
-      <MenuBackdrop onClose={onClose} />
-      <div className="absolute top-full left-0 mt-1.5 w-[280px] bg-card rounded-lg border border-border shadow-lg z-40 py-1">
-        {isToday ? (
-          <button
-            type="button"
-            onClick={() => onSelect({ type: "right-now" })}
-            className={menuItemClass(current.type === "right-now")}
-          >
-            Right now
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => onSelect(getDefaultAvailability("at-time", current))}
-            className={menuItemClass(current.type === "at-time")}
-          >
-            At [time]
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={() => onSelect(getDefaultAvailability("time-range", current))}
-          className={menuItemClass(current.type === "time-range")}
-        >
-          From [time] to [time]
-        </button>
-
-        <button
-          type="button"
-          onClick={() =>
-            onSelect(getDefaultAvailability("duration-from", current))
-          }
-          className={menuItemClass(current.type === "duration-from")}
-        >
-          For at least [duration] starting at [time]
-        </button>
-      </div>
-    </>
+    <div className="mt-3 flex items-center justify-end gap-2">
+      <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+        Cancel
+      </Button>
+      <Button type="button" size="sm" onClick={onApply}>
+        Apply
+      </Button>
+    </div>
   );
 }
 
-function TimePopover({
+function TimeForm({
   label,
   hour,
   minute,
   onApply,
-  onClose,
+  onCancel,
 }: {
   label: string;
   hour: number;
   minute: number;
   onApply: (hour: number, minute: number) => void;
-  onClose: () => void;
+  onCancel: () => void;
 }) {
   const [time, setTime] = useState(
     `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`,
   );
+  const apply = () => {
+    const [nextHour, nextMinute] = time.split(":").map(Number);
+    onApply(nextHour, nextMinute);
+  };
 
   return (
-    <>
-      <MenuBackdrop onClose={onClose} />
-      <div className="absolute top-full left-0 mt-1.5 w-[220px] bg-card rounded-lg border border-border shadow-lg z-40 p-3">
-        <label className="text-[11px] text-muted-foreground mb-1.5 block uppercase tracking-wide">
-          {label}
-        </label>
-
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        apply();
+      }}
+    >
+      <label className="text-xs text-muted-foreground mb-1.5 block uppercase tracking-wide">
+        {label}
         <input
           type="time"
           value={time}
           onChange={(e) => setTime(e.target.value)}
-          className="w-full h-9 px-2.5 rounded-md border border-border bg-input-background text-foreground text-[13px] focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className={cn(INPUT, "mt-1.5 normal-case tracking-normal")}
         />
-
-        <div className="mt-3 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-8 px-3 rounded-md text-[12px] text-muted-foreground hover:bg-accent transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const [nextHour, nextMinute] = time.split(":").map(Number);
-              onApply(nextHour, nextMinute);
-            }}
-            className="h-8 px-3 rounded-md bg-primary hover:bg-primary/90 text-primary-foreground text-[12px] font-medium transition-colors"
-          >
-            Apply
-          </button>
-        </div>
-      </div>
-    </>
+      </label>
+      <FormActions onCancel={onCancel} onApply={apply} />
+    </form>
   );
 }
 
-function DurationPopover({
+function DurationForm({
   hours,
   minutes,
   onApply,
-  onClose,
+  onCancel,
 }: {
   hours: number;
   minutes: number;
   onApply: (hours: number, minutes: number) => void;
-  onClose: () => void;
+  onCancel: () => void;
 }) {
   const [draftHours, setDraftHours] = useState(hours);
   const [draftMinutes, setDraftMinutes] = useState(minutes);
+  const labelClass = "text-xs text-muted-foreground block uppercase tracking-wide";
 
   return (
-    <>
-      <MenuBackdrop onClose={onClose} />
-      <div className="absolute top-full left-0 mt-1.5 w-[240px] bg-card rounded-lg border border-border shadow-lg z-40 p-3">
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-[11px] text-muted-foreground mb-1.5 block uppercase tracking-wide">
-              Hours
-            </label>
-            <input
-              type="number"
-              min="0"
-              max="12"
-              value={draftHours}
-              onChange={(e) => setDraftHours(parseInt(e.target.value, 10) || 0)}
-              className="w-full h-9 px-2.5 rounded-md border border-border bg-input-background text-foreground text-[13px] focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-
-          <div>
-            <label className="text-[11px] text-muted-foreground mb-1.5 block uppercase tracking-wide">
-              Minutes
-            </label>
-            <select
-              value={draftMinutes}
-              onChange={(e) => setDraftMinutes(parseInt(e.target.value, 10))}
-              className="w-full h-9 px-2.5 rounded-md border border-border bg-input-background text-foreground text-[13px] focus:outline-none focus:ring-2 focus:ring-primary/30"
-            >
-              <option value={0}>0</option>
-              <option value={15}>15</option>
-              <option value={30}>30</option>
-              <option value={45}>45</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="mt-3 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-8 px-3 rounded-md text-[12px] text-muted-foreground hover:bg-accent transition-colors"
+    <div>
+      <div className="grid grid-cols-2 gap-2">
+        <label className={labelClass}>
+          Hours
+          <input
+            type="number"
+            min="0"
+            max="12"
+            value={draftHours}
+            onChange={(e) => setDraftHours(parseInt(e.target.value, 10) || 0)}
+            className={cn(INPUT, "mt-1.5")}
+          />
+        </label>
+        <label className={labelClass}>
+          Minutes
+          <select
+            value={draftMinutes}
+            onChange={(e) => setDraftMinutes(parseInt(e.target.value, 10))}
+            className={cn(INPUT, "mt-1.5")}
           >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => onApply(draftHours, draftMinutes)}
-            className="h-8 px-3 rounded-md bg-primary hover:bg-primary/90 text-primary-foreground text-[12px] font-medium transition-colors"
-          >
-            Apply
-          </button>
-        </div>
+            <option value={0}>0</option>
+            <option value={15}>15</option>
+            <option value={30}>30</option>
+            <option value={45}>45</option>
+          </select>
+        </label>
       </div>
-    </>
+      <FormActions onCancel={onCancel} onApply={() => onApply(draftHours, draftMinutes)} />
+    </div>
   );
-}
-
-function MenuBackdrop({ onClose }: { onClose: () => void }) {
-  return <div className="fixed inset-0 z-30" onClick={onClose} />;
-}
-
-function getDayLabel(day: Day) {
-  return DAYS.find((d) => d.value === day)?.label ?? "Today";
 }
 
 function formatDuration(hours: number, minutes: number) {
@@ -697,12 +404,4 @@ function getDefaultAvailability(
     startHour: 9,
     startMin: 0,
   };
-}
-
-function menuItemClass(selected: boolean) {
-  return `w-full px-3.5 py-2 text-left text-[13px] transition-colors ${
-    selected
-      ? "bg-primary/10 text-primary font-medium"
-      : "hover:bg-accent text-foreground"
-  }`;
 }

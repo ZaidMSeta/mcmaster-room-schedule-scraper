@@ -1,5 +1,7 @@
 import type { TimeSlot } from "../../lib/rooms/types";
-import { DAY_END_HOUR, DAY_START_HOUR, slotEnd, toMins } from "../../lib/rooms/time";
+import { DAY_END_HOUR, DAY_START_HOUR, slotEnd, slotStart, toMins } from "../../lib/rooms/time";
+import { cn } from "../../components/ui/utils";
+import { TIMELINE } from "./statusStyles";
 
 interface TimelineStripProps {
   schedule: TimeSlot[];
@@ -7,9 +9,16 @@ interface TimelineStripProps {
   showNow?: boolean;
 }
 
-const DAY_START = DAY_START_HOUR;
-const DAY_END = DAY_END_HOUR;
-const TOTAL_HOURS = DAY_END - DAY_START;
+const DAY_START = DAY_START_HOUR * 60;
+const DAY_END = DAY_END_HOUR * 60;
+
+function toPercent(mins: number) {
+  return ((mins - DAY_START) / (DAY_END - DAY_START)) * 100;
+}
+
+function hourLabel(h: number) {
+  return h > 12 ? `${h - 12}p` : h === 12 ? "12p" : `${h}a`;
+}
 
 export function TimelineStrip({
   schedule,
@@ -17,68 +26,56 @@ export function TimelineStrip({
   showNow = true,
 }: TimelineStripProps) {
   const now = new Date();
-  const currentHour = now.getHours();
-  const currentMin = now.getMinutes();
-  const nowMins = toMins(currentHour, currentMin);
+  const nowMins = toMins(now.getHours(), now.getMinutes());
+  const nowPercent = toPercent(nowMins);
 
-  const dayStartMins = DAY_START * 60;
-  const dayEndMins = DAY_END * 60;
-  const totalMins = dayEndMins - dayStartMins;
+  const ticks = compact
+    ? [8, 12, 17, 21]
+    : Array.from({ length: DAY_END_HOUR - DAY_START_HOUR + 1 }, (_, i) => DAY_START_HOUR + i).filter(
+        (_, i) => i % 2 === 0,
+      );
 
-  const getPercent = (hour: number, min: number) => {
-    const mins = toMins(hour, min);
-    return ((mins - dayStartMins) / totalMins) * 100;
-  };
-
-  const nowPercent = ((nowMins - dayStartMins) / totalMins) * 100;
-
-  const hours = Array.from({ length: TOTAL_HOURS + 1 }, (_, i) => DAY_START + i);
+  const tickRow = (
+    <div className={cn("relative", compact ? "h-4 mt-0.5" : "h-5 mb-1")} aria-hidden>
+      {ticks.map((h) => (
+        <span
+          key={h}
+          className={cn(
+            "absolute text-muted-foreground -translate-x-1/2",
+            compact ? "text-[10px]" : "text-xs",
+          )}
+          style={{ left: `${toPercent(h * 60)}%` }}
+        >
+          {hourLabel(h)}
+        </span>
+      ))}
+    </div>
+  );
 
   return (
     <div>
-      {!compact && (
-        <div className="relative h-5 mb-1">
-          {hours.filter((_, i) => i % 2 === 0).map((h) => {
-            const pct = getPercent(h, 0);
-            const label = h > 12 ? `${h - 12}p` : h === 12 ? "12p" : `${h}a`;
-
-            return (
-              <span
-                key={h}
-                className="absolute text-[11px] text-muted-foreground -translate-x-1/2"
-                style={{ left: `${pct}%` }}
-              >
-                {label}
-              </span>
-            );
-          })}
-        </div>
-      )}
+      {!compact && tickRow}
 
       <div
-        className={`relative w-full rounded-full overflow-hidden ${
-          compact ? "h-2.5" : "h-3.5"
-        }`}
-        style={{ backgroundColor: "#e8f5e9" }}
+        className={cn(
+          "relative w-full rounded-full overflow-hidden",
+          compact ? "h-2.5" : "h-3.5",
+          TIMELINE.track,
+        )}
       >
         {schedule.map((slot, i) => {
-          const left = Math.max(0, getPercent(slot.startHour, slot.startMin));
-          const right = Math.min(100, getPercent(slot.endHour, slot.endMin));
-          const width = right - left;
-
-          if (width <= 0) return null;
-
-          const isPast = slotEnd(slot) <= nowMins;
+          const left = Math.max(0, toPercent(slotStart(slot)));
+          const right = Math.min(100, toPercent(slotEnd(slot)));
+          if (right <= left) return null;
 
           return (
             <div
               key={i}
-              className="absolute top-0 h-full rounded-sm"
-              style={{
-                left: `${left}%`,
-                width: `${width}%`,
-                backgroundColor: isPast ? "#d4d4d4" : "#ef9a9a",
-              }}
+              className={cn(
+                "absolute top-0 h-full rounded-sm",
+                slotEnd(slot) <= nowMins ? TIMELINE.pastClass : TIMELINE.class,
+              )}
+              style={{ left: `${left}%`, width: `${right - left}%` }}
               title={slot.label}
             />
           );
@@ -86,33 +83,13 @@ export function TimelineStrip({
 
         {showNow && nowPercent >= 0 && nowPercent <= 100 && (
           <div
-            className="absolute top-0 h-full w-[2px] z-10"
-            style={{
-              left: `${nowPercent}%`,
-              backgroundColor: "#2d3748",
-            }}
+            className={cn("absolute top-0 h-full w-[2px] z-10", TIMELINE.now)}
+            style={{ left: `${nowPercent}%` }}
           />
         )}
       </div>
 
-      {compact && (
-        <div className="relative h-4 mt-0.5">
-          {[8, 12, 17, 21].map((h) => {
-            const pct = getPercent(h, 0);
-            const label = h > 12 ? `${h - 12}p` : h === 12 ? "12p" : `${h}a`;
-
-            return (
-              <span
-                key={h}
-                className="absolute text-[10px] text-muted-foreground -translate-x-1/2"
-                style={{ left: `${pct}%` }}
-              >
-                {label}
-              </span>
-            );
-          })}
-        </div>
-      )}
+      {compact && tickRow}
     </div>
   );
 }
