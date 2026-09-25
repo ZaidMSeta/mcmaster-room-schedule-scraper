@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { Lock, Plug, Search } from "lucide-react";
-import { Button } from "../../components/ui/button";
+import { Search } from "lucide-react";
+import { Checkbox } from "../../components/ui/checkbox";
+import { Label } from "../../components/ui/label";
 import { Card } from "../../components/ui/card";
 import {
   Select,
@@ -209,13 +210,21 @@ export function RoomFinder() {
 
       <Card className="p-5 gap-0">
         <QueryBuilder value={query} onChange={setQuery} buildings={buildings} now={now} />
-        <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
-          <FilterToggle pressed={filters.power} onClick={() => toggleFilter("power")} icon={<Plug />}>
-            Outlets at seats
-          </FilterToggle>
-          <FilterToggle pressed={filters.hideLocked} onClick={() => toggleFilter("hideLocked")} icon={<Lock />}>
-            Hide rooms that may be locked
-          </FilterToggle>
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-8 mt-4 pt-4 border-t">
+          <FilterCheckbox
+            id="filter-power"
+            checked={filters.power}
+            onChange={() => toggleFilter("power")}
+            label="Only rooms with outlets at seats"
+            hint="Per the McMaster classroom directory"
+          />
+          <FilterCheckbox
+            id="filter-locked"
+            checked={filters.hideLocked}
+            onChange={() => toggleFilter("hideLocked")}
+            label="Hide rooms that may be locked"
+            hint="Departmental rooms and testing centres"
+          />
         </div>
       </Card>
 
@@ -327,32 +336,27 @@ function compareRooms(a: Room, b: Room): number {
   );
 }
 
-function FilterToggle({
-  pressed,
-  onClick,
-  icon,
-  children,
+function FilterCheckbox({
+  id,
+  checked,
+  onChange,
+  label,
+  hint,
 }: {
-  pressed: boolean;
-  onClick: () => void;
-  icon: ReactNode;
-  children: ReactNode;
+  id: string;
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  hint: string;
 }) {
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      aria-pressed={pressed}
-      onClick={onClick}
-      className={cn(
-        "rounded-full font-normal",
-        pressed && "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary dark:bg-primary/10",
-      )}
-    >
-      {icon}
-      {children}
-    </Button>
+    <div className="flex items-start gap-2">
+      <Checkbox id={id} checked={checked} onCheckedChange={onChange} className="mt-0.5" />
+      <Label htmlFor={id} className="flex-col items-start gap-0 text-sm font-normal leading-snug cursor-pointer">
+        <span className="text-foreground">{label}</span>
+        <span className="text-xs text-muted-foreground">{hint}</span>
+      </Label>
+    </div>
   );
 }
 

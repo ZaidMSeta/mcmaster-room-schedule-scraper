@@ -335,7 +335,7 @@ function RoomFacts({ info }: { info: RoomInfo }) {
             rel="noreferrer"
             className="mt-3 inline-flex items-center gap-1 text-sm text-primary hover:underline underline-offset-2"
           >
-            Full details in the McMaster Libraries classroom directory
+            Full details in the McMaster classroom directory
             <ExternalLink className="size-3.5" />
           </a>
         )}
