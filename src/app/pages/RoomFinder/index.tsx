@@ -202,7 +202,7 @@ export function RoomFinder() {
       </div>
 
       <Card className="p-5 gap-0">
-        <QueryBuilder value={query} onChange={setQuery} buildings={buildings} />
+        <QueryBuilder value={query} onChange={setQuery} buildings={buildings} now={now} />
       </Card>
 
       {loadError ? (
