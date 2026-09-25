@@ -37,11 +37,6 @@ function formatDateLabel(iso: string): string {
   });
 }
 
-// "Sep 23"
-function formatScrapedAt(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
 export function RoomFinder() {
   // Re-render every 30s so "right now" statuses don't go stale while the page is open
   const [now, setNow] = useState(() => new Date());
@@ -202,8 +197,7 @@ export function RoomFinder() {
         </p>
         {rawData && (
           <p className="text-sm text-muted-foreground mt-1">
-            {rawData.termName} timetable, updated {formatScrapedAt(rawData.scrapedAt)} · showing{" "}
-            {formatDateLabel(selectedIso)}
+            Showing {formatDateLabel(selectedIso)}
           </p>
         )}
       </div>
@@ -216,14 +210,12 @@ export function RoomFinder() {
             checked={filters.power}
             onChange={() => toggleFilter("power")}
             label="Only rooms with outlets at seats"
-            hint="Per the McMaster classroom directory"
           />
           <FilterCheckbox
             id="filter-locked"
             checked={filters.hideLocked}
             onChange={() => toggleFilter("hideLocked")}
             label="Hide rooms that may be locked"
-            hint="Departmental rooms and testing centres"
           />
         </div>
       </Card>
@@ -341,20 +333,17 @@ function FilterCheckbox({
   checked,
   onChange,
   label,
-  hint,
 }: {
   id: string;
   checked: boolean;
   onChange: () => void;
   label: string;
-  hint: string;
 }) {
   return (
-    <div className="flex items-start gap-2">
-      <Checkbox id={id} checked={checked} onCheckedChange={onChange} className="mt-0.5" />
-      <Label htmlFor={id} className="flex-col items-start gap-0 text-sm font-normal leading-snug cursor-pointer">
-        <span className="text-foreground">{label}</span>
-        <span className="text-xs text-muted-foreground">{hint}</span>
+    <div className="flex items-center gap-2">
+      <Checkbox id={id} checked={checked} onCheckedChange={onChange} />
+      <Label htmlFor={id} className="text-sm font-normal text-foreground cursor-pointer">
+        {label}
       </Label>
     </div>
   );
