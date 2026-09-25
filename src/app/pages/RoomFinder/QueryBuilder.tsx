@@ -11,24 +11,41 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { cn } from "../../components/ui/utils";
+import { dayToDate, toIsoDate } from "../../lib/rooms/data";
 
 interface QueryBuilderProps {
   value: QueryState;
   onChange: (value: QueryState) => void;
   buildings: RawBuilding[];
+  now: Date;
 }
 
 type OpenPopover = null | "start-time" | "end-time" | "duration";
 
 const DAYS: { value: Day; label: string }[] = [
   { value: "today", label: "Today" },
-  { value: "monday", label: "Monday" },
-  { value: "tuesday", label: "Tuesday" },
-  { value: "wednesday", label: "Wednesday" },
-  { value: "thursday", label: "Thursday" },
-  { value: "friday", label: "Friday" },
-  { value: "saturday", label: "Saturday" },
+  { value: "monday", label: "Mon" },
+  { value: "tuesday", label: "Tue" },
+  { value: "wednesday", label: "Wed" },
+  { value: "thursday", label: "Thu" },
+  { value: "friday", label: "Fri" },
+  { value: "saturday", label: "Sat" },
 ];
+
+// Today, then the next six days in date order. The weekday that is today is left out since
+// "Today" covers it, unless it's the current selection (e.g. from a link).
+function dayOptions(now: Date, selected: Day) {
+  const today = toIsoDate(dayToDate("today", now));
+  return DAYS.filter(
+    (d) => d.value === "today" || d.value === selected || toIsoDate(dayToDate(d.value, now)) !== today,
+  ).sort((a, b) => dayToDate(a.value, now).getTime() - dayToDate(b.value, now).getTime() || (a.value === "today" ? -1 : 1));
+}
+
+// "Mon (Sep 28)": the date each choice resolves to (today, or the next one of that weekday)
+function dayLabel(day: { value: Day; label: string }, now: Date): string {
+  const date = dayToDate(day.value, now).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${day.label} (${date})`;
+}
 
 // Radix Select can't use "" as a value
 const ANY_BUILDING = "any";
@@ -49,7 +66,7 @@ const PILL =
 const INPUT =
   "w-full h-9 px-2.5 rounded-md border bg-input-background text-foreground text-sm focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
-export function QueryBuilder({ value, onChange, buildings }: QueryBuilderProps) {
+export function QueryBuilder({ value, onChange, buildings, now }: QueryBuilderProps) {
   const [openPopover, setOpenPopover] = useState<OpenPopover>(null);
   // const binding keeps the discriminated-union narrowing inside callbacks
   const avail = value.availability;
@@ -138,9 +155,9 @@ export function QueryBuilder({ value, onChange, buildings }: QueryBuilderProps) 
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {DAYS.map((day) => (
+          {dayOptions(now, value.day).map((day) => (
             <SelectItem key={day.value} value={day.value}>
-              {day.label}
+              {dayLabel(day, now)}
             </SelectItem>
           ))}
         </SelectContent>
