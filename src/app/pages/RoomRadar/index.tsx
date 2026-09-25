@@ -13,8 +13,10 @@ import {
 } from "../../components/ui/select";
 import { cn } from "../../components/ui/utils";
 import type { QueryState, RawRoomsFile, Room, RoomStatus } from "../../lib/rooms/types";
-import { getRoomStatus, isRoomFreeAt, isRoomFreeBetween } from "../../lib/rooms/status";
+import { CHANGEOVER_MINS, getRoomStatus, isRoomFreeBetween } from "../../lib/rooms/status";
 import { toMins } from "../../lib/rooms/time";
+import { campusNow } from "../../lib/rooms/clock";
+import { calendarNoteFor } from "../../lib/rooms/calendar";
 import { parseUrlState, toUrlParams, type RoomFilters, type SortBy, type UrlState } from "../../lib/rooms/url";
 import { mayBeLocked } from "../../lib/rooms/access";
 import {
@@ -37,11 +39,11 @@ function formatDateLabel(iso: string): string {
   });
 }
 
-export function RoomFinder() {
+export function RoomRadar() {
   // Re-render every 30s so "right now" statuses don't go stale while the page is open
-  const [now, setNow] = useState(() => new Date());
+  const [now, setNow] = useState(() => campusNow());
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 30_000);
+    const id = setInterval(() => setNow(campusNow()), 30_000);
     return () => clearInterval(id);
   }, []);
   const currentHour = now.getHours();
@@ -92,7 +94,7 @@ export function RoomFinder() {
     if (!rawData) return [];
     const names = new Map(rawData.buildings.map((b) => [b.code, b.name]));
     return rawData.rooms.map((room) =>
-      mapRawRoomToRoom(room, names.get(room.buildingCode) ?? room.buildingCode, selectedDate),
+      mapRawRoomToRoom(room, names.get(room.buildingCode) ?? room.buildingCode, selectedDate, rawData),
     );
     // selectedIso captures the date; selectedDate is a new object every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -105,6 +107,9 @@ export function RoomFinder() {
 
   const noClassesThatDay =
     roomsForSelectedDay.length > 0 && roomsForSelectedDay.every((r) => r.schedule.length === 0);
+
+  // Holidays, recess and exams from the Registrar's calendar (the timetable doesn't know them)
+  const calendarNote = calendarNoteFor(selectedIso);
 
   const outOfTerm =
     !!rawData &&
@@ -127,11 +132,14 @@ export function RoomFinder() {
 
     if (avail.type === "right-now") {
       const { status } = getRoomStatus(room, currentHour, currentMin);
-      return status === "free" || status === "soon-occupied";
+      // "Class in N min" rooms are only free for a changeover, so they don't count
+      return status === "free";
     }
 
     if (avail.type === "at-time") {
-      return isRoomFreeAt(room, avail.hour, avail.min);
+      // Free at that time and for long enough to be worth using
+      const at = toMins(avail.hour, avail.min);
+      return isRoomFreeBetween(room, at, at + CHANGEOVER_MINS);
     }
 
     if (avail.type === "time-range") {
@@ -185,7 +193,7 @@ export function RoomFinder() {
 
   const freeCount = filteredRooms.filter((room) => {
     const { status } = getRoomStatus(room, refTime.hour, refTime.min);
-    return status === "free" || status === "soon-occupied";
+    return status === "free";
   }).length;
 
   return (
@@ -226,25 +234,26 @@ export function RoomFinder() {
         <MessageCard title="Loading rooms..." body="Reading timetable data." />
       ) : (
         <div className="space-y-4">
-          {outOfTerm && (
-            <div className={cn("rounded-xl border px-4 py-3 text-sm", TONE_STYLES.soon.soft, TONE_STYLES.soon.text)}>
-              Classes aren't in session on {formatDateLabel(selectedIso)} (
-              {rawData.termName} runs {formatDateLabel(rawData.termStart)} to{" "}
-              {formatDateLabel(rawData.termEnd)}), so every room shows as free.
-            </div>
-          )}
-          {!outOfTerm && noClassesThatDay && (
-            <div className={cn("rounded-xl border px-4 py-3 text-sm", TONE_STYLES.soon.soft, TONE_STYLES.soon.text)}>
-              No classes are scheduled on {formatDateLabel(selectedIso)}, so every room shows as free.
-              Buildings may be locked.
-            </div>
-          )}
+          {calendarNote ? (
+            <Notice>{calendarNote.message}</Notice>
+          ) : outOfTerm ? (
+            <Notice>
+              Classes aren't in session on {formatDateLabel(selectedIso)} ({rawData.termName} runs{" "}
+              {formatDateLabel(rawData.termStart)} to {formatDateLabel(rawData.termEnd)}), so every room shows
+              as free.
+            </Notice>
+          ) : noClassesThatDay ? (
+            <Notice>
+              No classes are scheduled on {formatDateLabel(selectedIso)}, so every room shows as free. Buildings
+              may be locked.
+            </Notice>
+          ) : null}
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-baseline gap-2">
-              <span className="font-semibold text-foreground">
+              <h2 className="text-base font-semibold text-foreground">
                 {filteredRooms.length} room{filteredRooms.length !== 1 ? "s" : ""}
-              </span>
+              </h2>
               <span className="text-sm text-muted-foreground">{freeCount} available</span>
             </div>
 
@@ -325,6 +334,14 @@ function compareRooms(a: Room, b: Room): number {
   return (
     a.building.localeCompare(b.building) ||
     a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true })
+  );
+}
+
+function Notice({ children }: { children: ReactNode }) {
+  return (
+    <div role="status" className={cn("rounded-xl border px-4 py-3 text-sm", TONE_STYLES.soon.soft, TONE_STYLES.soon.text)}>
+      {children}
+    </div>
   );
 }
 
