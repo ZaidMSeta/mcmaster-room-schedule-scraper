@@ -1,7 +1,8 @@
-import { FlaskConical } from "lucide-react";
+import { Lock, Plug } from "lucide-react";
 import type { Room } from "../../lib/rooms/types";
 import { getRoomStatus } from "../../lib/rooms/status";
 import { toMins } from "../../lib/rooms/time";
+import { ACCESS_TAGS } from "../../lib/rooms/access";
 import { Badge } from "../../components/ui/badge";
 import { Card } from "../../components/ui/card";
 import { cn } from "../../components/ui/utils";
@@ -16,17 +17,33 @@ interface RoomCardProps {
   onClick?: () => void;
 }
 
-export function LabTag() {
+export function AccessTag({ room }: { room: Room }) {
+  const tag = room.info && ACCESS_TAGS[room.info.access];
+  if (!tag) return null;
   return (
-    <Badge
-      variant="secondary"
-      className="text-muted-foreground"
-      title="Only used for labs this term, so it may be locked outside class times"
-    >
-      <FlaskConical />
-      Lab – may be locked
+    <Badge variant="secondary" className="text-muted-foreground" title={tag.title}>
+      <Lock />
+      {tag.label}
     </Badge>
   );
+}
+
+export function PowerBadge() {
+  return (
+    <Badge variant="outline" className="text-muted-foreground" title="Power outlets at the seats">
+      <Plug />
+      Outlets at seats
+    </Badge>
+  );
+}
+
+// "Classroom · 70 seats"
+export function roomSummary(room: Room): string | null {
+  const parts = [
+    room.info?.type,
+    room.info?.capacity ? `${room.info.capacity} seats` : undefined,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 export function RoomCard({
@@ -60,9 +77,11 @@ export function RoomCard({
             <h4 className="font-semibold text-foreground leading-tight">
               {room.buildingCode} {room.roomNumber}
             </h4>
-            {room.isLab && <LabTag />}
+            <AccessTag room={room} />
           </div>
-          <p className="text-sm text-muted-foreground mt-0.5 truncate">{room.building}</p>
+          <p className="text-sm text-muted-foreground mt-0.5 truncate">
+            {[room.building, roomSummary(room)].filter(Boolean).join(" · ")}
+          </p>
         </div>
 
         <Badge variant="outline" className={cn("rounded-full shrink-0", toneStyle.soft, toneStyle.text)}>
@@ -74,6 +93,7 @@ export function RoomCard({
       <div className="flex items-center gap-2 mb-3">
         <span className={cn("size-2 rounded-full", toneStyle.dot)} />
         <span className="text-sm text-foreground">{label}</span>
+        {room.info?.power && <PowerBadge />}
       </div>
 
       <p className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wide">Schedule</p>

@@ -11,7 +11,8 @@
     "build": "vite build",
     "build:full": "npm run build-rooms && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json"
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "scrape:directory": "TS_NODE_PROJECT=tsconfig.node.json node --loader ts-node/esm scripts/scrapeClassroomDirectory.ts"
   },
   "keywords": [],
   "author": "",

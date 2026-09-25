@@ -59,7 +59,8 @@ export function mapRawRoomToRoom(rawRoom: RawRoom, buildingName: string, date: D
     building: buildingName,
     buildingCode: rawRoom.buildingCode,
     roomNumber: rawRoom.roomNumber,
-    isLab: rawRoom.isLab,
+    info: rawRoom.info,
+    hasClassesThisTerm: rawRoom.meetings.length > 0,
     schedule: rawRoom.meetings
       .filter((meeting) => meeting.day === dayNumber && meetingRunsOn(meeting, isoDate))
       .map((meeting) => {
