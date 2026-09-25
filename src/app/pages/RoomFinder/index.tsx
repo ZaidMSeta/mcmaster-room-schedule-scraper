@@ -82,20 +82,25 @@ export function RoomFinder() {
     ? roomsForSelectedDay.find((r) => r.id === selectedRoomId) ?? null
     : null;
 
+  const noClassesThatDay =
+    roomsForSelectedDay.length > 0 && roomsForSelectedDay.every((r) => r.schedule.length === 0);
+
   const outOfTerm =
     !!rawData?.termStart &&
     !!rawData?.termEnd &&
     (selectedIso < rawData.termStart || selectedIso > rawData.termEnd);
 
-  // reference time for status display — current time for "today", query time otherwise
+  // Time that statuses are shown for: the searched time, or the current time for "right now"
   const refTime = useMemo(() => {
-    if (query.day === "today") return { hour: currentHour, min: currentMin };
     const avail = query.availability;
     if (avail.type === "at-time") return { hour: avail.hour, min: avail.min };
     if (avail.type === "time-range") return { hour: avail.startHour, min: avail.startMin };
     if (avail.type === "duration-from") return { hour: avail.startHour, min: avail.startMin };
     return { hour: currentHour, min: currentMin };
   }, [query, currentHour, currentMin]);
+
+  // Where to draw the "now" line: only when looking at today
+  const nowMins = query.day === "today" ? toMins(currentHour, currentMin) : undefined;
 
   const meetsAvailabilityCriteria = (room: Room): boolean => {
     const avail = query.availability;
@@ -147,14 +152,10 @@ export function RoomFinder() {
         const sb = getRoomStatus(b, refTime.hour, refTime.min).status;
         const diff = statusOrder[sa] - statusOrder[sb];
         if (diff !== 0) return diff;
-        return a.building.localeCompare(b.building) || a.roomNumber.localeCompare(b.roomNumber);
+        return compareRooms(a, b);
       });
     } else {
-      result.sort(
-        (a, b) =>
-          a.building.localeCompare(b.building) ||
-          a.roomNumber.localeCompare(b.roomNumber),
-      );
+      result.sort(compareRooms);
     }
 
     return result;
@@ -195,6 +196,12 @@ export function RoomFinder() {
               Classes aren't in session on {formatDateLabel(selectedIso)} (
               {rawData.termName ?? "this term"} runs {formatDateLabel(rawData.termStart!)} to{" "}
               {formatDateLabel(rawData.termEnd!)}), so every room shows as free.
+            </div>
+          )}
+          {!outOfTerm && noClassesThatDay && (
+            <div className={cn("rounded-xl border px-4 py-3 text-sm", TONE_STYLES.soon.soft, TONE_STYLES.soon.text)}>
+              No classes are scheduled on {formatDateLabel(selectedIso)}, so every room shows as free.
+              Buildings may be locked.
             </div>
           )}
 
@@ -247,7 +254,7 @@ export function RoomFinder() {
                   room={room}
                   currentHour={refTime.hour}
                   currentMin={refTime.min}
-                  showNow={query.day === "today"}
+                  nowMins={nowMins}
                   onClick={() => setSelectedRoomId(room.id)}
                 />
               ))}
@@ -271,9 +278,18 @@ export function RoomFinder() {
         currentHour={refTime.hour}
         currentMin={refTime.min}
         dayLabel={query.day === "today" ? "today" : formatDateLabel(selectedIso).split(",")[0]}
+        nowMins={nowMins}
         onClose={() => setSelectedRoomId(null)}
       />
     </div>
+  );
+}
+
+// Building, then room number with numeric parts compared as numbers (JHE 210 before JHE 1100)
+function compareRooms(a: Room, b: Room): number {
+  return (
+    a.building.localeCompare(b.building) ||
+    a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true })
   );
 }
 

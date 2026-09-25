@@ -24,7 +24,8 @@ export type Day =
   | "tuesday"
   | "wednesday"
   | "thursday"
-  | "friday";
+  | "friday"
+  | "saturday";
 
 export type AvailabilityMode =
   | { type: "right-now" }

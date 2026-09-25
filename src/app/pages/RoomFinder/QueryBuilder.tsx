@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type { AvailabilityMode, Day, QueryState } from "../../lib/rooms/types";
-import { formatTime } from "../../lib/rooms/time";
+import { formatTime, fromMins, LATEST_MINS, roundUpToQuarter, toMins } from "../../lib/rooms/time";
 import { Button } from "../../components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
 import {
@@ -27,7 +27,11 @@ const DAYS: { value: Day; label: string }[] = [
   { value: "wednesday", label: "Wednesday" },
   { value: "thursday", label: "Thursday" },
   { value: "friday", label: "Friday" },
+  { value: "saturday", label: "Saturday" },
 ];
+
+// Shortest time range you can search
+const MIN_RANGE = 30;
 
 const MODE_TRIGGER_LABEL: Record<AvailabilityMode["type"], string> = {
   "right-now": "right now",
@@ -62,8 +66,7 @@ export function QueryBuilder({ value, onChange, buildings }: QueryBuilderProps) 
 
     // switching away from today: right-now doesn't apply, default to at-time
     if (newDay !== "today" && avail.type === "right-now") {
-      const now = new Date();
-      newAvailability = { type: "at-time", hour: now.getHours(), min: now.getMinutes() };
+      newAvailability = getDefaultAvailability("at-time", avail);
     }
 
     // switching back to today: at-time becomes right-now
@@ -166,20 +169,12 @@ export function QueryBuilder({ value, onChange, buildings }: QueryBuilderProps) 
       {avail.type === "time-range" && (
         <>
           {timePill("start-time", "Start time", avail.startHour, avail.startMin, (hour, minute) =>
-            updateAvailability({ ...avail, startHour: hour, startMin: minute }),
+            updateAvailability(withValidEnd({ ...avail, startHour: hour, startMin: minute })),
           )}
           <Text>to</Text>
-          {timePill("end-time", "End time", avail.endHour, avail.endMin, (hour, minute) => {
-            const startMins = avail.startHour * 60 + avail.startMin;
-            const endMins = hour * 60 + minute;
-            // clamp: end must be at least 30 min after start
-            const clamped = Math.min(1410, endMins <= startMins ? startMins + 30 : endMins);
-            updateAvailability({
-              ...avail,
-              endHour: Math.floor(clamped / 60),
-              endMin: clamped % 60,
-            });
-          })}
+          {timePill("end-time", "End time", avail.endHour, avail.endMin, (hour, minute) =>
+            updateAvailability(withValidEnd({ ...avail, endHour: hour, endMin: minute }, MIN_RANGE)),
+          )}
         </>
       )}
 
@@ -217,13 +212,21 @@ function Text({ children }: { children: ReactNode }) {
   return <span className="text-sm text-muted-foreground">{children}</span>;
 }
 
-function FormActions({ onCancel, onApply }: { onCancel: () => void; onApply: () => void }) {
+function FormActions({
+  onCancel,
+  onApply,
+  disabled = false,
+}: {
+  onCancel: () => void;
+  onApply: () => void;
+  disabled?: boolean;
+}) {
   return (
     <div className="mt-3 flex items-center justify-end gap-2">
       <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
         Cancel
       </Button>
-      <Button type="button" size="sm" onClick={onApply}>
+      <Button type="button" size="sm" onClick={onApply} disabled={disabled}>
         Apply
       </Button>
     </div>
@@ -315,7 +318,11 @@ function DurationForm({
           </select>
         </label>
       </div>
-      <FormActions onCancel={onCancel} onApply={() => onApply(draftHours, draftMinutes)} />
+      <FormActions
+        onCancel={onCancel}
+        onApply={() => onApply(draftHours, draftMinutes)}
+        disabled={draftHours === 0 && draftMinutes === 0}
+      />
     </div>
   );
 }
@@ -332,76 +339,39 @@ function formatDuration(hours: number, minutes: number) {
   return `${minutes} min`;
 }
 
+// Keeps the start time when switching modes; coming from "right now" starts at the next quarter hour
 function getDefaultAvailability(
   nextType: AvailabilityMode["type"],
   current: AvailabilityMode,
 ): AvailabilityMode {
-  if (nextType === "right-now") {
-    return { type: "right-now" };
-  }
+  if (nextType === current.type) return current;
+  if (nextType === "right-now") return { type: "right-now" };
 
-  if (nextType === "at-time") {
-    if (current.type === "at-time") return current;
-    if (current.type === "time-range") return { type: "at-time", hour: current.startHour, min: current.startMin };
-    if (current.type === "duration-from") return { type: "at-time", hour: current.startHour, min: current.startMin };
-    const now = new Date();
-    return { type: "at-time", hour: now.getHours(), min: now.getMinutes() };
-  }
+  const start =
+    current.type === "at-time"
+      ? toMins(current.hour, current.min)
+      : current.type === "right-now"
+        ? roundUpToQuarter(new Date())
+        : toMins(current.startHour, current.startMin);
+  const { hour, min } = fromMins(start);
+
+  if (nextType === "at-time") return { type: "at-time", hour, min };
 
   if (nextType === "time-range") {
-    if (current.type === "time-range") {
-      return current;
-    }
-
-    if (current.type === "duration-from") {
-      return {
-        type: "time-range",
-        startHour: current.startHour,
-        startMin: current.startMin,
-        endHour: current.startHour + 2,
-        endMin: current.startMin,
-      };
-    }
-
-    if (current.type === "at-time") {
-      return {
-        type: "time-range",
-        startHour: current.hour,
-        startMin: current.min,
-        endHour: current.hour + 2,
-        endMin: current.min,
-      };
-    }
-
-    return {
-      type: "time-range",
-      startHour: 9,
-      startMin: 0,
-      endHour: 12,
-      endMin: 0,
-    };
+    return withValidEnd({ type: "time-range", startHour: hour, startMin: min, endHour: 0, endMin: 0 }, 120);
   }
 
-  // duration-from
-  if (current.type === "duration-from") {
-    return current;
-  }
+  return { type: "duration-from", hours: 1, minutes: 0, startHour: hour, startMin: min };
+}
 
-  if (current.type === "at-time") {
-    return {
-      type: "duration-from",
-      hours: 1,
-      minutes: 0,
-      startHour: current.hour,
-      startMin: current.min,
-    };
-  }
+type TimeRange = Extract<AvailabilityMode, { type: "time-range" }>;
 
-  return {
-    type: "duration-from",
-    hours: 1,
-    minutes: 0,
-    startHour: 9,
-    startMin: 0,
-  };
+// Keeps the end at least MIN_RANGE after the start; if it isn't, moves it to start + fallbackLength
+function withValidEnd(range: TimeRange, fallbackLength = 60): TimeRange {
+  const start = Math.min(toMins(range.startHour, range.startMin), LATEST_MINS - MIN_RANGE);
+  let end = toMins(range.endHour, range.endMin);
+  if (end < start + MIN_RANGE) end = Math.min(LATEST_MINS, start + fallbackLength);
+  const s = fromMins(start);
+  const e = fromMins(end);
+  return { ...range, startHour: s.hour, startMin: s.min, endHour: e.hour, endMin: e.min };
 }

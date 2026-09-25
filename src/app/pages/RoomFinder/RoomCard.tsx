@@ -1,6 +1,7 @@
 import { FlaskConical } from "lucide-react";
 import type { Room } from "../../lib/rooms/types";
 import { getRoomStatus } from "../../lib/rooms/status";
+import { toMins } from "../../lib/rooms/time";
 import { Badge } from "../../components/ui/badge";
 import { Card } from "../../components/ui/card";
 import { cn } from "../../components/ui/utils";
@@ -11,7 +12,7 @@ interface RoomCardProps {
   room: Room;
   currentHour: number;
   currentMin: number;
-  showNow?: boolean;
+  nowMins?: number;
   onClick?: () => void;
 }
 
@@ -32,7 +33,7 @@ export function RoomCard({
   room,
   currentHour,
   currentMin,
-  showNow = true,
+  nowMins,
   onClick,
 }: RoomCardProps) {
   const { status, label } = getRoomStatus(room, currentHour, currentMin);
@@ -76,7 +77,12 @@ export function RoomCard({
       </div>
 
       <p className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wide">Schedule</p>
-      <TimelineStrip schedule={room.schedule} compact showNow={showNow} />
+      <TimelineStrip
+        schedule={room.schedule}
+        refMins={toMins(currentHour, currentMin)}
+        nowMins={nowMins}
+        compact
+      />
     </Card>
   );
 }

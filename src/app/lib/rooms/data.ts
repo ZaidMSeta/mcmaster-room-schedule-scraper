@@ -17,6 +17,7 @@ const WEEKDAY_INDEX: Record<Exclude<Day, "today">, number> = {
   wednesday: 3,
   thursday: 4,
   friday: 5,
+  saturday: 6,
 };
 
 // Resolves a Day choice to a concrete date: today, or the next occurrence of that weekday

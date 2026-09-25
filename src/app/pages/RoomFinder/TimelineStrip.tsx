@@ -1,12 +1,15 @@
 import type { TimeSlot } from "../../lib/rooms/types";
-import { DAY_END_HOUR, DAY_START_HOUR, slotEnd, slotStart, toMins } from "../../lib/rooms/time";
+import { DAY_END_HOUR, DAY_START_HOUR, slotEnd, slotStart } from "../../lib/rooms/time";
 import { cn } from "../../components/ui/utils";
 import { TIMELINE } from "./statusStyles";
 
 interface TimelineStripProps {
   schedule: TimeSlot[];
+  // Classes that end by this time are drawn as past
+  refMins: number;
+  // Draws the "now" line here; left out when not looking at today
+  nowMins?: number;
   compact?: boolean;
-  showNow?: boolean;
 }
 
 const DAY_START = DAY_START_HOUR * 60;
@@ -22,15 +25,14 @@ function hourLabel(h: number) {
 
 export function TimelineStrip({
   schedule,
+  refMins,
+  nowMins,
   compact = false,
-  showNow = true,
 }: TimelineStripProps) {
-  const now = new Date();
-  const nowMins = toMins(now.getHours(), now.getMinutes());
-  const nowPercent = toPercent(nowMins);
+  const nowPercent = nowMins === undefined ? -1 : toPercent(nowMins);
 
   const ticks = compact
-    ? [8, 12, 17, 21]
+    ? [8, 12, 17, 22]
     : Array.from({ length: DAY_END_HOUR - DAY_START_HOUR + 1 }, (_, i) => DAY_START_HOUR + i).filter(
         (_, i) => i % 2 === 0,
       );
@@ -73,7 +75,7 @@ export function TimelineStrip({
               key={i}
               className={cn(
                 "absolute top-0 h-full rounded-sm",
-                slotEnd(slot) <= nowMins ? TIMELINE.pastClass : TIMELINE.class,
+                slotEnd(slot) <= refMins ? TIMELINE.pastClass : TIMELINE.class,
               )}
               style={{ left: `${left}%`, width: `${right - left}%` }}
               title={slot.label}
@@ -81,7 +83,7 @@ export function TimelineStrip({
           );
         })}
 
-        {showNow && nowPercent >= 0 && nowPercent <= 100 && (
+        {nowPercent >= 0 && nowPercent <= 100 && (
           <div
             className={cn("absolute top-0 h-full w-[2px] z-10", TIMELINE.now)}
             style={{ left: `${nowPercent}%` }}

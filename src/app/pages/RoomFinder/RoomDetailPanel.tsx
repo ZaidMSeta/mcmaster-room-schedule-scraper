@@ -22,6 +22,7 @@ interface RoomDetailPanelProps {
   currentHour: number;
   currentMin: number;
   dayLabel: string; // "today" or a weekday name
+  nowMins?: number; // set when looking at today
   onClose: () => void;
 }
 
@@ -186,7 +187,9 @@ function RoomDetails({
   currentHour,
   currentMin,
   dayLabel,
+  nowMins: realNowMins,
 }: RoomDetailPanelProps & { room: Room }) {
+  const isToday = realNowMins !== undefined;
   const nowMins = toMins(currentHour, currentMin);
   const { status, label: statusLabel } = getRoomStatus(room, currentHour, currentMin);
   const { tone, label: statusTitle } = STATUS_STYLES[status];
@@ -239,7 +242,7 @@ function RoomDetails({
         </div>
 
         <div className="px-6 pb-2">
-          <TimelineStrip schedule={room.schedule} showNow={dayLabel === "today"} />
+          <TimelineStrip schedule={room.schedule} refMins={nowMins} nowMins={realNowMins} />
         </div>
 
         <div className="mx-6 my-4 border-t" />
@@ -255,6 +258,7 @@ function RoomDetails({
                 key={i}
                 block={block}
                 nowMins={nowMins}
+                isToday={isToday}
                 isLast={i === blocks.length - 1}
               />
             ))}
@@ -280,10 +284,12 @@ function RoomDetails({
 function ScheduleRow({
   block,
   nowMins,
+  isToday,
   isLast,
 }: {
   block: ScheduleBlock;
   nowMins: number;
+  isToday: boolean;
   isLast: boolean;
 }) {
   const duration = formatDuration(blockDurationMins(block));
@@ -337,7 +343,7 @@ function ScheduleRow({
         <div className={cn("rounded-lg px-3.5 py-2.5 border", card)}>
           <div className="flex items-center justify-between gap-2">
             <span className={title}>
-              {block.type === "free" ? (isCurrent ? "Free now" : "Free") : block.label}
+              {block.type === "free" ? (isCurrent && isToday ? "Free now" : "Free") : block.label}
             </span>
             <span className={cn("text-xs shrink-0", muted ? "text-muted-foreground/50" : "text-muted-foreground")}>
               {duration}
@@ -349,7 +355,9 @@ function ScheduleRow({
                 {timeRange}
               </span>
               {block.isCurrent && (
-                <Badge variant="outline" className={cn("px-1.5 py-0", busy.soft, busy.text)}>NOW</Badge>
+                <Badge variant="outline" className={cn("px-1.5 py-0", busy.soft, busy.text)}>
+                  {isToday ? "NOW" : "AT THIS TIME"}
+                </Badge>
               )}
               {block.isNext && (
                 <Badge variant="outline" className={cn("px-1.5 py-0", soon.soft, soon.text)}>NEXT</Badge>
