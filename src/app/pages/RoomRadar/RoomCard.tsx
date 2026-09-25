@@ -21,7 +21,7 @@ export function AccessTag({ room }: { room: Room }) {
   const tag = room.info && ACCESS_TAGS[room.info.access];
   if (!tag) return null;
   return (
-    <Badge variant="secondary" className="text-muted-foreground" title={tag.title}>
+    <Badge variant="secondary" className="text-secondary-foreground/85" title={tag.title}>
       <Lock />
       {tag.label}
     </Badge>
@@ -30,7 +30,7 @@ export function AccessTag({ room }: { room: Room }) {
 
 export function PowerBadge() {
   return (
-    <Badge variant="outline" className="text-muted-foreground" title="Power outlets at the seats">
+    <Badge variant="outline" className="text-secondary-foreground/85" title="Power outlets at the seats">
       <Plug />
       Outlets at seats
     </Badge>
@@ -74,9 +74,9 @@ export function RoomCard({
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h4 className="font-semibold text-foreground leading-tight">
+            <h3 className="text-base font-semibold text-foreground leading-tight">
               {room.buildingCode} {room.roomNumber}
-            </h4>
+            </h3>
             <AccessTag room={room} />
           </div>
           <p className="text-sm text-muted-foreground mt-0.5 truncate">

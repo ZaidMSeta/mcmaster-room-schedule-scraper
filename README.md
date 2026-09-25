@@ -33,7 +33,10 @@ npm run scrape:directory
 # 4. Build src/data/rooms.json from out/xml/<termId>/ and out/classroom-directory.json (newest term folder by default)
 npm run build-rooms
 
-# 5. Build the site
+# 5. Update src/app/lib/rooms/calendar.ts with the term's no-class days (holidays, recess) and
+#    exam period from https://registrar.mcmaster.ca/dates-and-deadlines/
+
+# 6. Build the site
 npm run build
 ```
 

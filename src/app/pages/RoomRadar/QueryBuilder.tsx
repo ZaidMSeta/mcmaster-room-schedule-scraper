@@ -12,6 +12,7 @@ import {
 } from "../../components/ui/select";
 import { cn } from "../../components/ui/utils";
 import { dayToDate, toIsoDate } from "../../lib/rooms/data";
+import { campusNow } from "../../lib/rooms/clock";
 
 interface QueryBuilderProps {
   value: QueryState;
@@ -273,9 +274,14 @@ function TimeForm({
   const [time, setTime] = useState(
     `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`,
   );
+  // The time input is empty when cleared; anything after 11:30 PM can't be searched
+  const match = time.match(/^(\d{2}):(\d{2})$/);
+  const mins = match ? toMins(Number(match[1]), Number(match[2])) : null;
+  const error = mins === null ? "Enter a time" : mins > LATEST_MINS ? "Pick a time up to 11:30 PM" : null;
   const apply = () => {
-    const [nextHour, nextMinute] = time.split(":").map(Number);
-    onApply(nextHour, nextMinute);
+    if (mins === null || error) return;
+    const next = fromMins(mins);
+    onApply(next.hour, next.min);
   };
 
   return (
@@ -291,10 +297,13 @@ function TimeForm({
           type="time"
           value={time}
           onChange={(e) => setTime(e.target.value)}
+          max="23:30"
+          aria-invalid={error ? true : undefined}
           className={cn(INPUT, "mt-1.5 normal-case tracking-normal")}
         />
       </label>
-      <FormActions onCancel={onCancel} onApply={apply} />
+      {error && <p className="mt-1.5 text-xs text-destructive">{error}</p>}
+      <FormActions onCancel={onCancel} onApply={apply} disabled={!!error} />
     </form>
   );
 }
@@ -324,7 +333,7 @@ function DurationForm({
             min="0"
             max="12"
             value={draftHours}
-            onChange={(e) => setDraftHours(parseInt(e.target.value, 10) || 0)}
+            onChange={(e) => setDraftHours(Math.min(12, Math.max(0, parseInt(e.target.value, 10) || 0)))}
             className={cn(INPUT, "mt-1.5")}
           />
         </label>
@@ -375,7 +384,7 @@ function getDefaultAvailability(
     current.type === "at-time"
       ? toMins(current.hour, current.min)
       : current.type === "right-now"
-        ? roundUpToQuarter(new Date())
+        ? roundUpToQuarter(campusNow())
         : toMins(current.startHour, current.startMin);
   const { hour, min } = fromMins(start);
 
