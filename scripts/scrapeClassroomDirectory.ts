@@ -10,7 +10,7 @@ import path from "path";
 const BASE = "https://library.mcmaster.ca/classroom-directory";
 const OUTPUT_FILE = path.resolve(process.cwd(), "out", "classroom-directory.json");
 const DELAY_MS = 2000;
-const USER_AGENT = "McMaster room finder (build script; run once per term)";
+const USER_AGENT = "Room Radar (McMaster empty-room finder; build script, run once per term)";
 
 // The site answers Node's fetch (and Playwright's request client) with 403 whatever the
 // User-Agent, but serves curl with the same honest User-Agent, so fetch through curl.

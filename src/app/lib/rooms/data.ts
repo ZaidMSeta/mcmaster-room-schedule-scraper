@@ -1,4 +1,6 @@
 import roomsUrl from "../../../data/rooms.json?url";
+import { campusNow } from "./clock";
+import { calendarNoteFor } from "./calendar";
 import type { Day, RawMeeting, RawRoom, RawRoomsFile, Room } from "./types";
 import { fromMins, slotStart } from "./time";
 
@@ -24,7 +26,7 @@ const WEEKDAY_INDEX: Record<Exclude<Day, "today">, number> = {
 
 // Resolves a Day choice to a concrete date: today, or the next occurrence of that weekday
 // (today counts if it matches).
-export function dayToDate(day: Day, now: Date = new Date()): Date {
+export function dayToDate(day: Day, now: Date = campusNow()): Date {
   const date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   if (day === "today") return date;
   const diff = (WEEKDAY_INDEX[day] - date.getDay() + 7) % 7;
@@ -43,16 +45,19 @@ function dateToExportDay(date: Date): number {
   return date.getDay() + 1;
 }
 
-// Missing dates mean the meeting runs all term
-function meetingRunsOn(meeting: RawMeeting, isoDate: string): boolean {
-  if (meeting.startDate && isoDate < meeting.startDate) return false;
-  if (meeting.endDate && isoDate > meeting.endDate) return false;
-  return true;
+// Missing dates mean the meeting runs all term (rooms.json leaves out dates equal to the
+// term's), so fall back to the term bounds, not "forever"
+function meetingRunsOn(meeting: RawMeeting, isoDate: string, term: TermBounds): boolean {
+  return isoDate >= (meeting.startDate ?? term.termStart) && isoDate <= (meeting.endDate ?? term.termEnd);
 }
 
-export function mapRawRoomToRoom(rawRoom: RawRoom, buildingName: string, date: Date): Room {
+type TermBounds = Pick<RawRoomsFile, "termStart" | "termEnd">;
+
+export function mapRawRoomToRoom(rawRoom: RawRoom, buildingName: string, date: Date, term: TermBounds): Room {
   const dayNumber = dateToExportDay(date);
   const isoDate = toIsoDate(date);
+  // Holidays and recess: the timetable still lists classes, but none run
+  const noClasses = calendarNoteFor(isoDate)?.kind === "no-classes";
 
   return {
     id: rawRoom.id,
@@ -62,7 +67,7 @@ export function mapRawRoomToRoom(rawRoom: RawRoom, buildingName: string, date: D
     info: rawRoom.info,
     hasClassesThisTerm: rawRoom.meetings.length > 0,
     schedule: rawRoom.meetings
-      .filter((meeting) => meeting.day === dayNumber && meetingRunsOn(meeting, isoDate))
+      .filter((meeting) => !noClasses && meeting.day === dayNumber && meetingRunsOn(meeting, isoDate, term))
       .map((meeting) => {
         const start = fromMins(meeting.start);
         const end = fromMins(meeting.end);

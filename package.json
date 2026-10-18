@@ -17,7 +17,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "Scrapes McMaster's MyTimetable and shows which classrooms are free",
+  "description": "Room Radar: scrapes McMaster's MyTimetable and shows which classrooms are free",
   "dependencies": {
     "@radix-ui/react-checkbox": "1.1.4",
     "@radix-ui/react-dialog": "1.1.6",

@@ -52,7 +52,7 @@ export function Layout() {
             <div className="h-10 w-10 bg-white rounded-full flex items-center justify-center shadow-md">
               <span className="text-xl font-bold text-[#7A003C]">M</span>
             </div>
-            <span className="font-bold text-lg text-white leading-tight">Room Finder</span>
+            <span className="font-bold text-lg text-white leading-tight">Room Radar</span>
           </div>
           <ThemeToggle />
         </div>

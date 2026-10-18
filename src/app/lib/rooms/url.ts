@@ -1,7 +1,7 @@
 import type { AvailabilityMode, Day, QueryState } from "./types";
 import { fromMins, LATEST_MINS, roundUpToQuarter, toMins } from "./time";
 
-// URL params for the room finder, e.g.
+// URL params for Room Radar, e.g.
 //   ?building=JHE&day=wed&from=13:30&to=15:00&power=1&hideLocked=1&room=JHE+264
 // Defaults (any building, today, right now, sort by availability) are left out.
 

@@ -1,8 +1,8 @@
 import { Fragment, useRef } from "react";
 import { Building2, Clock, ExternalLink } from "lucide-react";
-import type { Room, RoomInfo, RoomStatus } from "../../lib/rooms/types";
-import { getRoomStatus } from "../../lib/rooms/status";
-import { DAY_END_HOUR, DAY_START_HOUR, formatDuration, formatTime, slotEnd, slotStart, toMins } from "../../lib/rooms/time";
+import type { Room, RoomInfo } from "../../lib/rooms/types";
+import { busyPeriods, CHANGEOVER_MINS, getRoomStatus } from "../../lib/rooms/status";
+import { DAY_END_HOUR, DAY_START_HOUR, formatDuration, formatTime, fromMins, slotEnd, slotStart, toMins } from "../../lib/rooms/time";
 import {
   Sheet,
   SheetContent,
@@ -29,142 +29,79 @@ interface RoomDetailPanelProps {
 const DAY_START = DAY_START_HOUR;
 const DAY_END = DAY_END_HOUR;
 
-function getSummaryLine(
-  room: Room,
-  status: RoomStatus,
-  statusLabel: string,
-  currentHour: number,
-  currentMin: number,
-  dayLabel: string,
-): string {
-  const nowMins = toMins(currentHour, currentMin);
+function formatMins(mins: number): string {
+  const { hour, min } = fromMins(mins);
+  return formatTime(hour, min);
+}
 
+function getSummaryLine(room: Room, refMins: number, dayLabel: string): string {
   if (room.schedule.length === 0) {
     return `No classes scheduled ${dayLabel}. Available all day.`;
   }
 
-  if (status === "free") {
-    // schedule is sorted by start time
-    const next = room.schedule.find((s) => slotStart(s) > nowMins);
+  const periods = busyPeriods(room.schedule);
+  const current = periods.find((p) => refMins >= p.start && refMins < p.end);
 
-    if (!next) {
-      return `No more classes ${dayLabel}. Free for the rest of the day.`;
-    }
-
-    const minsUntil = slotStart(next) - nowMins;
-
-    if (minsUntil >= 60) {
-      const hrs = Math.floor(minsUntil / 60);
-      const mins = minsUntil % 60;
-      return `You have about ${hrs}h${mins > 0 ? ` ${mins}m` : ""} before the next class at ${formatTime(next.startHour, next.startMin)}.`;
-    }
-
-    return `Free for ${minsUntil} minutes until ${next.label} at ${formatTime(next.startHour, next.startMin)}.`;
+  if (current) {
+    const inClass = current.slots.find((s) => refMins >= slotStart(s) && refMins < slotEnd(s));
+    const nextInPeriod = current.slots.find((s) => slotStart(s) > refMins);
+    const lead = inClass
+      ? `${inClass.label} is on.`
+      : `Between classes; the next one starts at ${formatMins(nextInPeriod ? slotStart(nextInPeriod) : current.end)}.`;
+    const busyUntil =
+      current.slots.length > 1
+        ? `Classes run back to back until ${formatMins(current.end)}`
+        : `Busy until ${formatMins(current.end)}`;
+    const after = periods.find((p) => p.start >= current.end);
+    const tail = after
+      ? `Then free for ${formatDuration(after.start - current.end)}.`
+      : "Free after that for the rest of the day.";
+    return `${lead} ${busyUntil} (${formatDuration(current.end - refMins)} from now). ${tail}`;
   }
 
-  if (status === "occupied" || status === "soon-free") {
-    const current = room.schedule.find(
-      (s) => nowMins >= slotStart(s) && nowMins < slotEnd(s),
-    );
-
-    if (current) {
-      const endsAt = formatTime(current.endHour, current.endMin);
-      const minsLeft = slotEnd(current) - nowMins;
-      const nextAfter = room.schedule.find((s) => slotStart(s) >= slotEnd(current));
-
-      if (!nextAfter) {
-        return `${current.label} ends at ${endsAt} (${minsLeft} min). Free after that for the rest of the day.`;
-      }
-
-      const gap = slotStart(nextAfter) - slotEnd(current);
-
-      if (gap > 0) {
-        return `${current.label} ends at ${endsAt} (${minsLeft} min). Then free for ${gap} min.`;
-      }
-
-      return `${current.label} ends at ${endsAt} (${minsLeft} min). Another class follows immediately.`;
-    }
+  const next = periods.find((p) => p.start > refMins);
+  if (!next) {
+    return `No more classes ${dayLabel}. Free for the rest of the day.`;
   }
 
-  if (status === "soon-occupied") {
-    return `${statusLabel}. Consider a different room if you need more time.`;
+  const minsUntil = next.start - refMins;
+  const first = next.slots[0];
+  if (minsUntil <= CHANGEOVER_MINS) {
+    return `${first.label} starts in ${minsUntil} min, so it's not worth settling in.`;
   }
-
-  return statusLabel;
+  return `Free for ${formatDuration(minsUntil)}, until ${first.label} at ${formatMins(next.start)}.`;
 }
 
 interface ScheduleBlock {
-  type: "free" | "class" | "past-class";
-  startHour: number;
-  startMin: number;
-  endHour: number;
-  endMin: number;
+  // "changeover": a gap between classes too short to use the room
+  type: "free" | "changeover" | "class";
+  start: number;
+  end: number;
   label?: string;
-  isCurrent?: boolean;
-  isNext?: boolean;
 }
 
-function buildScheduleBlocks(
-  room: Room,
-  currentHour: number,
-  currentMin: number,
-): ScheduleBlock[] {
-  const nowMins = toMins(currentHour, currentMin);
+// Every class in the room (including ones nested inside another), with the gaps between
+// them marked free or changeover
+function buildScheduleBlocks(room: Room): ScheduleBlock[] {
   const blocks: ScheduleBlock[] = [];
   let cursor = DAY_START * 60;
-  let foundNext = false;
 
-  for (const slot of room.schedule) {
-    const effectiveStart = Math.max(slotStart(slot), DAY_START * 60);
-    const effectiveEnd = Math.min(slotEnd(slot), DAY_END * 60);
+  for (const period of busyPeriods(room.schedule)) {
+    if (period.start > cursor) blocks.push({ type: "free", start: cursor, end: period.start });
 
-    if (effectiveEnd <= cursor) continue;
-
-    if (effectiveStart > cursor) {
-      blocks.push({
-        type: "free",
-        startHour: Math.floor(cursor / 60),
-        startMin: cursor % 60,
-        endHour: Math.floor(effectiveStart / 60),
-        endMin: effectiveStart % 60,
-      });
+    let covered = period.start;
+    for (const slot of period.slots) {
+      if (slotStart(slot) > covered) {
+        blocks.push({ type: "changeover", start: covered, end: slotStart(slot) });
+      }
+      blocks.push({ type: "class", start: slotStart(slot), end: slotEnd(slot), label: slot.label });
+      covered = Math.max(covered, slotEnd(slot));
     }
-
-    const isPast = effectiveEnd <= nowMins;
-    const isCurrent = nowMins >= effectiveStart && nowMins < effectiveEnd;
-    const isNext = !foundNext && !isPast && !isCurrent && effectiveStart > nowMins;
-
-    if (isNext) foundNext = true;
-
-    blocks.push({
-      type: isPast ? "past-class" : "class",
-      startHour: slot.startHour,
-      startMin: slot.startMin,
-      endHour: slot.endHour,
-      endMin: slot.endMin,
-      label: slot.label,
-      isCurrent,
-      isNext,
-    });
-
-    cursor = Math.max(cursor, effectiveEnd);
+    cursor = Math.max(cursor, period.end);
   }
 
-  if (cursor < DAY_END * 60) {
-    blocks.push({
-      type: "free",
-      startHour: Math.floor(cursor / 60),
-      startMin: cursor % 60,
-      endHour: DAY_END,
-      endMin: 0,
-    });
-  }
-
+  if (cursor < DAY_END * 60) blocks.push({ type: "free", start: cursor, end: DAY_END * 60 });
   return blocks;
-}
-
-function blockDurationMins(block: ScheduleBlock): number {
-  return slotEnd(block) - slotStart(block);
 }
 
 export function RoomDetailPanel(props: RoomDetailPanelProps) {
@@ -189,13 +126,17 @@ function RoomDetails({
   dayLabel,
   nowMins: realNowMins,
 }: RoomDetailPanelProps & { room: Room }) {
-  const isToday = realNowMins !== undefined;
   const nowMins = toMins(currentHour, currentMin);
+  // The searched time is the actual current time ("right now" on today), so "now" wording applies
+  const isLive = realNowMins !== undefined && realNowMins === nowMins;
   const { status, label: statusLabel } = getRoomStatus(room, currentHour, currentMin);
   const { tone, label: statusTitle } = STATUS_STYLES[status];
   const toneStyle = TONE_STYLES[tone];
-  const summary = getSummaryLine(room, status, statusLabel, currentHour, currentMin, dayLabel);
-  const blocks = buildScheduleBlocks(room, currentHour, currentMin);
+  const summary = getSummaryLine(room, nowMins, dayLabel);
+  const blocks = buildScheduleBlocks(room);
+  const nextClassIndex = blocks.some((b) => b.type === "class" && nowMins >= b.start && nowMins < b.end)
+    ? -1
+    : blocks.findIndex((b) => b.type === "class" && b.start > nowMins);
 
   const totalClasses = room.schedule.length;
   const remainingClasses = room.schedule.filter((s) => slotEnd(s) > nowMins).length;
@@ -222,7 +163,7 @@ function RoomDetails({
             <span className={cn("size-2 rounded-full", toneStyle.dot)} />
             <span className={cn("text-sm font-medium", toneStyle.text)}>{statusTitle}</span>
           </div>
-          <p className={cn("text-sm opacity-80 mt-1 ml-[18px]", toneStyle.text)}>{statusLabel}</p>
+          <p className={cn("text-sm mt-1 ml-[18px]", toneStyle.text)}>{statusLabel}</p>
         </div>
       </SheetHeader>
 
@@ -279,21 +220,22 @@ function RoomDetails({
               <ScheduleRow
                 key={i}
                 block={block}
-                nowMins={nowMins}
-                isToday={isToday}
+                refMins={nowMins}
+                isLive={isLive}
+                isNext={i === nextClassIndex}
                 isLast={i === blocks.length - 1}
               />
             ))}
 
             <li className="flex items-stretch">
               <div className="w-[88px] shrink-0 pr-3 py-2.5 text-right">
-                <span className="text-xs text-muted-foreground/60">{formatTime(DAY_END, 0)}</span>
+                <span className="text-xs text-muted-foreground">{formatTime(DAY_END, 0)}</span>
               </div>
               <div className="w-5 shrink-0 flex flex-col items-center">
                 <div className="size-1.5 rounded-full mt-3.5 bg-border" />
               </div>
               <div className="flex-1 pl-3 py-2.5">
-                <span className="text-xs text-muted-foreground/60">End of scheduled hours</span>
+                <span className="text-xs text-muted-foreground">End of scheduled hours</span>
               </div>
             </li>
           </ol>
@@ -346,19 +288,21 @@ function RoomFacts({ info }: { info: RoomInfo }) {
 
 function ScheduleRow({
   block,
-  nowMins,
-  isToday,
+  refMins,
+  isLive,
+  isNext,
   isLast,
 }: {
   block: ScheduleBlock;
-  nowMins: number;
-  isToday: boolean;
+  refMins: number; // the searched time
+  isLive: boolean; // refMins is the actual current time
+  isNext: boolean;
   isLast: boolean;
 }) {
-  const duration = formatDuration(blockDurationMins(block));
-  const timeRange = `${formatTime(block.startHour, block.startMin)} - ${formatTime(block.endHour, block.endMin)}`;
-  const isPast = slotEnd(block) <= nowMins;
-  const isCurrent = nowMins >= slotStart(block) && nowMins < slotEnd(block);
+  const duration = formatDuration(block.end - block.start);
+  const timeRange = `${formatMins(block.start)} - ${formatMins(block.end)}`;
+  const isPast = block.end <= refMins;
+  const isAt = refMins >= block.start && refMins < block.end;
   const free = TONE_STYLES.free;
   const busy = TONE_STYLES.busy;
   const soon = TONE_STYLES.soon;
@@ -366,34 +310,46 @@ function ScheduleRow({
   let dot: string;
   let card: string;
   let title: string;
+  let text: string;
   if (block.type === "free") {
-    dot = isPast ? "bg-muted-foreground/30" : cn(free.dot, isCurrent && "ring-4 ring-emerald-500/20");
-    card = isPast ? "bg-muted/30 border-transparent" : cn(free.soft, !isCurrent && "border-transparent");
-    title = cn("text-sm font-medium", isPast ? "text-muted-foreground/60" : free.text);
-  } else if (block.type === "past-class") {
+    dot = isPast ? "bg-muted-foreground/30" : cn(free.dot, isAt && "ring-4 ring-emerald-500/20");
+    card = isPast ? "bg-muted/30 border-transparent" : cn(free.soft, !isAt && "border-transparent");
+    title = cn("text-sm font-medium", isPast ? "text-muted-foreground" : free.text);
+    text = isAt && isLive ? "Free now" : "Free";
+  } else if (block.type === "changeover") {
+    dot = "bg-muted-foreground/30";
+    card = "bg-muted/40 border-transparent";
+    title = "text-sm text-muted-foreground";
+    text = "Changeover";
+  } else if (isPast) {
     dot = "bg-muted-foreground/30";
     card = "bg-muted/20 border-border/30";
-    title = "text-sm font-medium text-muted-foreground/60 line-through";
-  } else if (block.isCurrent) {
+    title = "text-sm font-medium text-muted-foreground line-through";
+    text = block.label ?? "";
+  } else if (isAt) {
     dot = cn(busy.dot, "ring-4 ring-red-500/20");
     card = busy.soft;
     title = cn("text-sm font-medium", busy.text);
-  } else if (block.isNext) {
+    text = block.label ?? "";
+  } else if (isNext) {
     dot = cn(soon.dot, "ring-4 ring-amber-500/15");
     card = soon.soft;
     title = cn("text-sm font-medium", soon.text);
+    text = block.label ?? "";
   } else {
     dot = "bg-red-300 dark:bg-red-500/60";
     card = "bg-card border-border";
     title = "text-sm font-medium text-foreground";
+    text = block.label ?? "";
   }
   const muted = block.type !== "class" && isPast;
+  const showRange = block.type === "class" || isAt;
 
   return (
     <li className="flex items-stretch">
       <div className="w-[88px] shrink-0 pr-3 py-2.5 text-right">
-        <span className={cn("text-xs", muted ? "text-muted-foreground/60" : "text-muted-foreground")}>
-          {formatTime(block.startHour, block.startMin)}
+        <span className={cn("text-xs", muted ? "text-muted-foreground" : "text-muted-foreground")}>
+          {formatMins(block.start)}
         </span>
       </div>
 
@@ -403,26 +359,24 @@ function ScheduleRow({
       </div>
 
       <div className="flex-1 pl-3 py-2">
-        <div className={cn("rounded-lg px-3.5 py-2.5 border", card)}>
+        <div className={cn("rounded-lg px-3.5 border", block.type === "changeover" ? "py-1.5" : "py-2.5", card)}>
           <div className="flex items-center justify-between gap-2">
-            <span className={title}>
-              {block.type === "free" ? (isCurrent && isToday ? "Free now" : "Free") : block.label}
-            </span>
-            <span className={cn("text-xs shrink-0", muted ? "text-muted-foreground/50" : "text-muted-foreground")}>
+            <span className={title}>{text}</span>
+            <span className={cn("text-xs shrink-0", muted ? "text-muted-foreground" : "text-muted-foreground")}>
               {duration}
             </span>
           </div>
-          {(block.type !== "free" || isCurrent) && (
+          {showRange && (
             <div className="flex items-center gap-2 mt-0.5">
-              <span className={cn("text-xs", muted ? "text-muted-foreground/50" : "text-muted-foreground")}>
+              <span className={cn("text-xs", muted ? "text-muted-foreground" : "text-muted-foreground")}>
                 {timeRange}
               </span>
-              {block.isCurrent && (
+              {block.type === "class" && isAt && (
                 <Badge variant="outline" className={cn("px-1.5 py-0", busy.soft, busy.text)}>
-                  {isToday ? "NOW" : "AT THIS TIME"}
+                  {isLive ? "NOW" : "AT THIS TIME"}
                 </Badge>
               )}
-              {block.isNext && (
+              {isNext && (
                 <Badge variant="outline" className={cn("px-1.5 py-0", soon.soft, soon.text)}>NEXT</Badge>
               )}
             </div>
